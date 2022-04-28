@@ -21,9 +21,9 @@
     .msgtext {color: #FFFFFF; position:absolute; padding-left: 10px; left: 59px; top: 7px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;}
     .msgtextShort {color: #FFFFFF; position:absolute; padding-left: 10px; left: 62px; top: 21px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size: 20px;}
     button {margin-left: 10px;}
-    
+
     #Measure { position: absolute; visibility: hidden; height: auto; width: auto; white-space: nowrap; }
-    
+
     .fadePopInAndStay {
       	display: block;
       	opacity: 0;
@@ -41,19 +41,19 @@
 
   <script type="text/javascript">
     var ws;
-    
+
     var isAdmin = false;
     if(window.location.search == '?admin'){
       isAdmin = true;
     }
-    
+
     var messageID = 0;
     var messages = [];
-    
+
     var MESSAGE_TIMEOUT;
     var MESSAGE_INSERT;
     var MESAGES_ALIGN;
-    
+
     var MAX_MESSAGES_TO_DISPLAY = 8;
     var SHORT_EMOTE_HEIGHT = 20;
     var LONG_EMOTE_HEIGHT = 14;
@@ -66,15 +66,15 @@
 
     function init() {
       if(isAdmin) {
-        
+
         MESSAGE_TIMEOUT = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESSAGE_TIMEOUT');
         MESSAGE_INSERT = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESSAGE_INSERT');
-        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESAGES-ALIGN');        
+        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESAGES-ALIGN');
       } else {
         document.getElementById('top_nav').style.display = 'none';
         MESSAGE_TIMEOUT = getComputedStyle(document.body, null).getPropertyValue('--MESSAGE_TIMEOUT');
         MESSAGE_INSERT = getComputedStyle(document.body, null).getPropertyValue('--MESSAGE_INSERT');
-        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--MESAGES-ALIGN'); 
+        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--MESAGES-ALIGN');
       }
 
       if(window.location.hostname != '') {
@@ -98,7 +98,7 @@
         console.log("onERROR");
         console.log(e)
       };
-      
+
       if(MESAGES_ALIGN == 'TOP-EDGE') {
         document.getElementById('messages').classList.add('messages-top');
       }else if(MESAGES_ALIGN == 'BOTTOM-EDGE') {
@@ -109,7 +109,7 @@
     function isSmall(span) {
       var test = document.getElementById("Measure");
       test.innerHTML = span.innerHTML;
-      
+
       console.log(test.clientWidth + 1)
       return ((test.clientWidth + 1) < 931);
     }
@@ -133,7 +133,7 @@
       console.log(str);
       var action = str.split('|')[0];
       var param = str.split('|')[1];
-      
+
       switch(action) {
         case 'DUMMY':
         case 'MSG':
@@ -159,15 +159,15 @@
         break;
       }
     }
-    
+
     function showMessage(json) {
       if(document.getElementById(json.id)) return;
-      
+
       var messages = document.getElementById("messages");
-      
+
       var portraitImg;
       var serviceOverlay = '';
-      
+
       portraitImg = json.avatarURL
       serviceOverlay = "<img class='overlay' src='"+json.serviceURL+"'\>"
 
@@ -194,7 +194,7 @@
           img.style.paddingBottom = 2;
         }
       }
-      
+
       message = document.createElement('div');
       if(json.id == 'null') {
         message.id = messageID++;
@@ -205,13 +205,13 @@
       message.classList.add('fadePopInAndStay');
       message.innerHTML = username+portrait+serviceOverlay;
       message.appendChild(messageText)
-      
+
       if(isAdmin){
         var controls = document.createElement('div');
         controls.style.position = 'absolute';
         controls.style.left = 200;
         controls.style.top = 51;
-        
+
         var dismissButton = document.createElement('button');
         dismissButton.id = 'Dismiss'+message.id;
         dismissButton.innerHTML = 'Dismiss';
@@ -238,7 +238,7 @@
           }
         }
         controls.appendChild(pinButton)
-        
+
         var hideButton = document.createElement('button');
         hideButton.id = 'Hide'+message.id;
         hideButton.innerHTML = 'Hide';
@@ -249,13 +249,13 @@
             ws.send('HIDE|'+this.value);
           } else {
             ws.send('UNHIDE|'+this.value);
-          }  
+          }
         }
         controls.appendChild(hideButton)
-        
+
         message.appendChild(controls)
       }
-      
+
       if(MESSAGE_INSERT == 'BOTTOM') {
         if(messages.children.length >= MAX_MESSAGES_TO_DISPLAY && !isAdmin) {
           messages.removeChild(messages.children[0])
@@ -267,12 +267,12 @@
         }
         messages.insertBefore(message, messages.firstChild);
       }
-      
+
       if(MESSAGE_TIMEOUT != 'NEVER') {
         cleanUp(messages, message);
       }
     }
-    
+
     function pinMessage(msgId) {
       msgDiv = document.getElementById(msgId);
 
@@ -283,7 +283,7 @@
         console.log('Message not found to pin... this should not happen.');
       }
     }
-    
+
     function unpinMessage(msgId) {
       msgDiv = document.getElementById(msgId);
       if(msgDiv) {
@@ -293,7 +293,7 @@
         console.log('Message not found to unpin... this should not happen.');
       }
     }
-    
+
     function unhideMessage(msgId) {
       msgDiv = document.getElementById(msgId);
       if(msgDiv) {
@@ -306,7 +306,7 @@
         console.log('Message not found to unhide... this should not happen.')
       }
     }
-    
+
     function hideMessage(id) {
       var msgDiv = document.getElementById(id);
       if(msgDiv) {
@@ -320,7 +320,7 @@
         }
       }
     }
-    
+
     function reloadMessages(json) {
       document.getElementById('messages').innerHTML = ''
       JSON.parse(json).forEach((msg, i) => {

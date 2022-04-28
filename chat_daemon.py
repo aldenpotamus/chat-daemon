@@ -61,10 +61,10 @@ def twitchCallback(data):
             print(user.profile_image_url)
             twitchProfileCache[data['display_name']] = user.profile_image_url
 
-    messageWithEmote = twitchEmoteSubs(data['message'], 
+    messageWithEmote = twitchEmoteSubs(data['message'],
                                        [e for e in data['event_raw'].split(';') if e.startswith('emotes')][0])
     print(messageWithEmote)
-    
+
     data['avatarURL'] = twitchProfileCache[data['display_name']]
     websocketServer.send_message_to_all('MSG|'+twitchMsgToJSON(data, messageWithEmote))
     discordSendMsg(':purple_square: **'+data['display_name']+"**", "Twitch", data['message'])
@@ -89,7 +89,7 @@ def twitchMsgToJSON(msg, msgHTML):
 def twitchEmoteSubs(messageText, substitutionText):
     msg = messageText
     edits = []
-    
+
     if len(substitutionText[7:]) > 1:
         for emote in substitutionText[7:].split('/'):
             id, ranges = emote.split(':')
@@ -99,9 +99,9 @@ def twitchEmoteSubs(messageText, substitutionText):
                 end = int(end)
                 edits.append((end, {'id': id, 'start': start, 'end': end}))
         edits.sort(key=lambda x: x[0], reverse=True)
-        
+
         print(edits)
-        
+
         for edit in edits:
             msg = twitchEmoteTemplate.safe_substitute({
                 'id': edit[1]['id'],
@@ -119,7 +119,7 @@ async def youtubeStart():
     livechat = LiveChatAsync(youtubeVideoId, callback=youtubeCallback)
     while True:
         await asyncio.sleep(1)
-        
+
     try:
         livechat.raise_for_status()
     except pytchat.ChatDataFinished:
@@ -154,7 +154,7 @@ def youtubeMsgToJSON(msg, msgHTML):
 
 def youtubeEmoteSubs(substitutionText):
     msg = ''
-    
+
     for item in substitutionText:
         if isinstance(item, str):
             msg += item
@@ -180,7 +180,7 @@ async def on_ready():
     global CONFIG
     print('[DISCORD] We have logged in as {0.user}'.format(discordClient))
     discordChannel = discordClient.get_channel(965324208362111076)
-    
+
     global youtubeAPI, youtubeVideoId
     videoData = youtubeAPI.get_video_by_id(video_id=youtubeVideoId)
     with requests.get(videoData.items[0].snippet.thumbnails.standard.url) as r:
@@ -189,11 +189,11 @@ async def on_ready():
         croppedBytes = BytesIO()
         tmpImg.save(croppedBytes, format='PNG')
         croppedBytes.seek(0)
-        
+
         picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
         links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/aldenpotamus>'
         message = await discordChannel.send(content=links, file=picture)
-    
+
     global discordThread
     discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:9]+']',
                                                        message=message,
@@ -242,7 +242,7 @@ def clientDisconnect(client, server):
 def clientMessage(client, server, message):
     action = message.split('|')[0]
     param = message.split('|')[1]
-    
+
     print(message)
     match action:
         case 'DUMMY':
@@ -285,17 +285,17 @@ def clientMessage(client, server, message):
         case 'RELOAD_CLIENTS':
             print('Clearing all clients.')
             websocketServer.send_message_to_all('CLEAR|')
-            
+
             print('Reloading '+param+' messages on ALL clients.')
             messagesStr = processMessage(param)
             websocketServer.send_message_to_all('RELOAD|'+messagesStr)
-            
+
             print('Repinning all pinned messages on all clients.')
             for messageid in pinnedIds.keys():
                 if pinnedIds[messageid]:
                     print('Pinning message: '+messageid)
                     websocketServer.send_message_to_all('PIN|'+messageid)
-                
+
             print('Hiding all hidden messages on all clients.')
             for messageid in hiddenIds.keys():
                 if hiddenIds[messageid]:
@@ -306,13 +306,13 @@ def clientMessage(client, server, message):
             print('Reloading '+param+' messages')
             messagesStr = processMessage(param)
             websocketServer.send_message(client, 'RELOAD|'+messagesStr)
-            
+
             print('Repinning all pinned messages on all clients.')
             for messageid in pinnedIds.keys():
                 if pinnedIds[messageid]:
                     print('Pinning message: '+messageid)
                     websocketServer.send_message(client, 'PIN|'+messageid)
-                
+
             print('Hiding all hidden messages on all clients.')
             for messageid in hiddenIds.keys():
                 if hiddenIds[messageid]:
@@ -333,12 +333,12 @@ def processMessage(numMessagesStr):
     for m in messages:
         messagesStr +=m+','
     messagesStr = messagesStr[:-1]+']'
-    
+
     return messagesStr
 
 def httpServerThreadTarget():
     Handler = http.server.SimpleHTTPRequestHandler
-    
+
     global CONFIG
     with socketserver.TCPServer(("", int(CONFIG['SERVER']['httpServerPort'])), Handler) as httpd:
         print("httpServer started on port:", CONFIG['SERVER']['httpServerPort'])
@@ -350,7 +350,7 @@ def main():
     httpServerThread = threading.Thread(target=httpServerThreadTarget,
                                         daemon=True)
     httpServerThread.start()
-    
+
     print("Connecting to Twitch...")
     twitchChat = PyWitchTMI(
         channel = CONFIG['AUTHENTICATION']['twitchChannelName'],
@@ -370,7 +370,7 @@ def main():
     websocketServer.set_fn_new_client(clientJoin)
     websocketServer.set_fn_client_left(clientDisconnect)
     websocketServer.set_fn_message_received(clientMessage)
-    websocketServer.run_forever(True) 
+    websocketServer.run_forever(True)
 
     print('Connecting to Discord')
     discordClientThread = threading.Thread(target=discordClientThreadTarget, daemon=True)
@@ -385,11 +385,11 @@ def main():
 if __name__ == '__main__':
     print('Running for video: '+str(sys.argv[1]))
     youtubeVideoId = str(sys.argv[1])
-    
+
     print('Parsing config file...')
     CONFIG = configparser.ConfigParser()
     CONFIG.read('config.ini')
-    
+
     global dummyMessages
     if(exists(CONFIG['GENERAL']['dummyMessageFile'])):
         print('Loading dummy messages...')
@@ -398,7 +398,7 @@ if __name__ == '__main__':
     else:
         print('No dummy file found, use dummyMessageBuilder.py to create one, if needed.')
         dummyMessages = {}
-    
+
     print('Running chatDaemon...')
     print('Args: '+str(sys.argv))
     main()
