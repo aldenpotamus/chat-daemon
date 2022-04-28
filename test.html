@@ -1,0 +1,74 @@
+<html>
+<head>
+  <style>
+  </style>
+  <title>Admin Widget</title>
+
+  <script type="text/javascript">
+    var ws;
+    var chatTypes;
+    
+    function init() {
+      ws = new WebSocket("ws://localhost:9001/");
+
+      ws.onopen = function() {
+        console.log('onOPEN');
+      };
+      
+      ws.onclose = function() {
+        console.log("onCLOSE");
+      };
+      ws.onerror = function(e) {
+        console.log("onERROR");
+        console.log(e)
+      };
+    }
+
+    function emulateShortTwitchMessage(){
+      console.log('TW:ShortTextMessage')
+      ws.send('DUMMY|TW:ShortTextMessage')
+    }
+    function emulateLongTwitchMessage(){
+      console.log('TW:LongTextMessage')
+      ws.send('DUMMY|TW:LongTextMessage')
+    }
+
+    function emulateShortYouTubeMessage(){
+      console.log('YT:ShortTextMessage')
+      ws.send('DUMMY|YT:ShortTextMessage')
+    }
+    function emulateLongYouTubeMessage(){
+      console.log('YT:LongTextMessage')
+      ws.send('DUMMY|YT:LongTextMessage')
+    }   
+
+    function emulateShortDiscordMessage(){
+      console.log('DC:ShortTextMessage')
+      ws.send('DUMMY|DC:ShortTextMessage')
+    }
+    function emulateLongDiscordMessage(){
+      console.log('DC:LongTextMessage')
+      ws.send('DUMMY|DC:LongTextMessage')
+    }        
+</script>
+</head>
+<body onload="init();">
+  <table>
+    <tr>
+      <td><span>Twitch: </span></td>
+      <td><button onclick="emulateShortTwitchMessage(); return false;">Short</button></td>
+      <td><button onclick="emulateLongTwitchMessage(); return false;">Long</button></td>
+    </tr>
+    <tr>
+      <td><span>YouTube: </span></td>
+      <td><button onclick="emulateShortYouTubeMessage(); return false;">Short</button></td>
+      <td><button onclick="emulateLongYouTubeMessage(); return false;">Long</button></td>
+    </tr>
+    <tr>
+      <td><span>Discord: </span></td>
+      <td><button onclick="emulateShortDiscordMessage(); return false;">Short</button></td>
+      <td><button onclick="emulateLongDiscordMessage(); return false;">Long</button></td>
+    </tr>
+  </table>
+</body>
+</html>

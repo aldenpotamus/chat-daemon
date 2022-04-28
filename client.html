@@ -1,0 +1,347 @@
+<html>
+<head>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@700&display=swap" rel="stylesheet">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+
+  <style>
+    body {background-color: transparent; --MESAGES-ALIGN:BOTTOM-EDGE; --MESSAGE_INSERT:TOP; --MESSAGE_TIMEOUT:20000; --ADMIN_MESAGES-ALIGN:TOP-EDGE; --ADMIN_MESSAGE_INSERT:TOP; --ADMIN_MESSAGE_TIMEOUT:NEVER} /*NORMAL*/
+    .hide {visibility:hidden; background-color: rgb(0 0 0 / 35%); border-radius: 40px; background: radial-gradient(circle at 0px, #333, #333 75px, rgb(0 0 0 / 20%) 350px, #333 1388px);}
+    .pinned {background-color: rgb(255 255 0 / 15%); border-radius: 40px;}
+    .messages-top {height: 620px; width: 1000px; display: flex;flex-direction: column;}
+    .messages-bottom {height: 620px; width: 1000px; display: flex;flex-direction: column-reverse;}
+    .portrait {position:absolute;clip-path: circle(30px at center);width: 64px;height: 64px;}
+    .overlay {position:absolute; top: 7px; height: 64px; width: 64px;}
+    .message {position: relative; height: 64px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
+    .twitchUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .youtubeUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .discordUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #516DF8; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .msgtext {color: #FFFFFF; position:absolute; padding-left: 10px; left: 59px; top: 7px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;}
+    .msgtextShort {color: #FFFFFF; position:absolute; padding-left: 10px; left: 62px; top: 21px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size: 20px;}
+    button {margin-left: 10px;}
+    
+    #Measure { position: absolute; visibility: hidden; height: auto; width: auto; white-space: nowrap; }
+    
+    .fadePopInAndStay {
+      	display: block;
+      	opacity: 0;
+      	visibility: visible;
+      	animation-name: doAnimStay;
+      	animation-duration: 0.3s;
+      	animation-fill-mode: forwards;/* Makes it stay after animation */
+      }
+      @-webkit-keyframes doAnimStay{
+        0%   {opacity:0;}
+        100% {opacity:1;}
+      }
+  </style>
+  <title>Chat Widget</title>
+
+  <script type="text/javascript">
+    var ws;
+    
+    var isAdmin = false;
+    if(window.location.search == '?admin'){
+      isAdmin = true;
+    }
+    
+    var messageID = 0;
+    var messages = [];
+    
+    var MESSAGE_TIMEOUT;
+    var MESSAGE_INSERT;
+    var MESAGES_ALIGN;
+    
+    var MAX_MESSAGES_TO_DISPLAY = 8;
+    var SHORT_EMOTE_HEIGHT = 20;
+    var LONG_EMOTE_HEIGHT = 14;
+
+    var usernameStyles = {
+      'Twitch': 'twitchUsername',
+      'YouTube': 'youtubeUsername',
+      'Discord': 'discordUsername'
+    }
+
+    function init() {
+      if(isAdmin) {
+        
+        MESSAGE_TIMEOUT = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESSAGE_TIMEOUT');
+        MESSAGE_INSERT = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESSAGE_INSERT');
+        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--ADMIN_MESAGES-ALIGN');        
+      } else {
+        document.getElementById('top_nav').style.display = 'none';
+        MESSAGE_TIMEOUT = getComputedStyle(document.body, null).getPropertyValue('--MESSAGE_TIMEOUT');
+        MESSAGE_INSERT = getComputedStyle(document.body, null).getPropertyValue('--MESSAGE_INSERT');
+        MESAGES_ALIGN = getComputedStyle(document.body, null).getPropertyValue('--MESAGES-ALIGN'); 
+      }
+
+      if(window.location.hostname != '') {
+        var wsAddress = 'ws://'+window.location.hostname+':9001/';
+        console.log(wsAddress);
+        ws = new WebSocket(wsAddress)
+      } else {
+        ws = new WebSocket("ws://localhost:9001/");
+      }
+
+      ws.onopen = function() {
+        console.log('onOPEN');
+      };
+      ws.onmessage = function(e) {
+        output(e.data);
+      };
+      ws.onclose = function() {
+        console.log("onCLOSE");
+      };
+      ws.onerror = function(e) {
+        console.log("onERROR");
+        console.log(e)
+      };
+      
+      if(MESAGES_ALIGN == 'TOP-EDGE') {
+        document.getElementById('messages').classList.add('messages-top');
+      }else if(MESAGES_ALIGN == 'BOTTOM-EDGE') {
+        document.getElementById('messages').classList.add('messages-bottom');
+      }
+    }
+
+    function isSmall(span) {
+      var test = document.getElementById("Measure");
+      test.innerHTML = span.innerHTML;
+      
+      console.log(test.clientWidth + 1)
+      return ((test.clientWidth + 1) < 931);
+    }
+
+    function cleanUp(messages, message) {
+      return new Promise(resolve => {
+        setTimeout(() => {
+          resolve('resolved');
+          if(message.getAttribute('class').includes('pinned')) {
+            console.log('message pinned, sleeping...')
+            setTimeout(() => { cleanUp(messages, message);}, MESSAGE_TIMEOUT);
+          } else if (!message.classList.contains('hide') && messages.contains(message)) {
+            messages.removeChild(message)
+            ws.send('HIDE|'+message.id);
+          }
+        }, MESSAGE_TIMEOUT);
+      });
+    }
+
+    function output(str) {
+      console.log(str);
+      var action = str.split('|')[0];
+      var param = str.split('|')[1];
+      
+      switch(action) {
+        case 'DUMMY':
+        case 'MSG':
+          showMessage(JSON.parse(param));
+        break;
+        case 'PIN':
+          pinMessage(param);
+        break;
+        case 'UNPIN':
+          unpinMessage(param);
+        break;
+        case 'UNHIDE':
+          unhideMessage(param);
+        break;
+        case 'HIDE':
+          hideMessage(param);
+        break;
+        case 'RELOAD':
+          reloadMessages(param);
+        break;
+        case 'CLEAR':
+          document.getElementById('messages').innerHTML = ''
+        break;
+      }
+    }
+    
+    function showMessage(json) {
+      if(document.getElementById(json.id)) return;
+      
+      var messages = document.getElementById("messages");
+      
+      var portraitImg;
+      var serviceOverlay = '';
+      
+      portraitImg = json.avatarURL
+      serviceOverlay = "<img class='overlay' src='"+json.serviceURL+"'\>"
+
+      var portrait = "<img class='portrait' referrerpolicy='no-referrer' src='"+portraitImg+"'\>"
+      var username = "<span class='"+(usernameStyles[json.service])+"'>"+json.userName+"</span>"
+
+      messageText = document.createElement('span');
+      messageText.classList.add('msgtextShort');
+      messageText.innerHTML = json.messageHTML;
+      if(!isSmall(messageText)) {
+        messageText.className = ""
+        messageText.classList.add('msgtext');
+        var images = messageText.getElementsByTagName('img');
+        for(img of images) {
+          img.height = LONG_EMOTE_HEIGHT;
+          img.style.verticalAlign = 'middle';
+          img.style.paddingBottom = 2;
+        }
+      } else {
+        var images = messageText.getElementsByTagName('img');
+        for(img of images) {
+          img.height = SHORT_EMOTE_HEIGHT;
+          img.style.verticalAlign = 'middle';
+          img.style.paddingBottom = 2;
+        }
+      }
+      
+      message = document.createElement('div');
+      if(json.id == 'null') {
+        message.id = messageID++;
+      } else {
+        message.id = json.id;
+      }
+      message.classList.add('message');
+      message.classList.add('fadePopInAndStay');
+      message.innerHTML = username+portrait+serviceOverlay;
+      message.appendChild(messageText)
+      
+      if(isAdmin){
+        var controls = document.createElement('div');
+        controls.style.position = 'absolute';
+        controls.style.left = 200;
+        controls.style.top = 51;
+        
+        var dismissButton = document.createElement('button');
+        dismissButton.id = 'Dismiss'+message.id;
+        dismissButton.innerHTML = 'Dismiss';
+        dismissButton.value = message.id;
+        dismissButton.onclick = function(event){
+          var msg = document.getElementById(this.value);
+          msg.remove();
+        }
+        controls.appendChild(dismissButton)
+
+        var pinButton = document.createElement('button');
+        pinButton.id = 'Pin'+message.id;
+        pinButton.innerHTML = 'Pin';
+        pinButton.value = message.id;
+        pinButton.onclick = function(event){
+          if(pinButton.innerHTML == 'Pin') {
+            console.log('Requesting message pin for id: '+this.value);
+            ws.send('PIN|'+this.value);
+            pinButton.innerHTML = 'Unpin';
+          } else {
+            console.log('Requesting message unpin for id: '+this.value);
+            ws.send('UNPIN|'+this.value);
+            pinButton.innerHTML = 'Pin';
+          }
+        }
+        controls.appendChild(pinButton)
+        
+        var hideButton = document.createElement('button');
+        hideButton.id = 'Hide'+message.id;
+        hideButton.innerHTML = 'Hide';
+        hideButton.value = message.id;
+        hideButton.onclick = function(event){
+          console.log('Requesting message hide for id: '+this.value);
+          if(hideButton.innerHTML == 'Hide') {
+            ws.send('HIDE|'+this.value);
+          } else {
+            ws.send('UNHIDE|'+this.value);
+          }  
+        }
+        controls.appendChild(hideButton)
+        
+        message.appendChild(controls)
+      }
+      
+      if(MESSAGE_INSERT == 'BOTTOM') {
+        if(messages.children.length >= MAX_MESSAGES_TO_DISPLAY && !isAdmin) {
+          messages.removeChild(messages.children[0])
+        }
+        messages.appendChild(message);
+      } else if (MESSAGE_INSERT == 'TOP') {
+        if(messages.children.length >= MAX_MESSAGES_TO_DISPLAY && !isAdmin) {
+          messages.removeChild(messages.children[messages.children.length-1])
+        }
+        messages.insertBefore(message, messages.firstChild);
+      }
+      
+      if(MESSAGE_TIMEOUT != 'NEVER') {
+        cleanUp(messages, message);
+      }
+    }
+    
+    function pinMessage(msgId) {
+      msgDiv = document.getElementById(msgId);
+
+      if(msgDiv) {
+        if(isAdmin) document.getElementById('Pin'+msgId).innerHTML = 'Unpin';
+        msgDiv.classList.add("pinned");
+      } else {
+        console.log('Message not found to pin... this should not happen.');
+      }
+    }
+    
+    function unpinMessage(msgId) {
+      msgDiv = document.getElementById(msgId);
+      if(msgDiv) {
+        msgDiv.classList.remove("pinned");
+        if(isAdmin) document.getElementById('Pin'+msgId).innerHTML = 'Pin'
+      } else {
+        console.log('Message not found to unpin... this should not happen.');
+      }
+    }
+    
+    function unhideMessage(msgId) {
+      msgDiv = document.getElementById(msgId);
+      if(msgDiv) {
+        if(isAdmin) {
+          var hideButton = document.getElementById('Hide'+msgId);
+          hideButton.innerHTML = 'Hide';
+        }
+        msgDiv.classList.remove('hide');
+      } else {
+        console.log('Message not found to unhide... this should not happen.')
+      }
+    }
+    
+    function hideMessage(id) {
+      var msgDiv = document.getElementById(id);
+      if(msgDiv) {
+        if(isAdmin) {
+          var hideButton = document.getElementById('Hide'+id);
+          hideButton.innerHTML = 'Unhide';
+        }
+        msgDiv.classList.add('hide');
+        if(!isAdmin) {
+          msgDiv.parentElement.removeChild(msgDiv);
+        }
+      }
+    }
+    
+    function reloadMessages(json) {
+      document.getElementById('messages').innerHTML = ''
+      JSON.parse(json).forEach((msg, i) => {
+          showMessage(msg);
+      });
+    }
+  </script>
+</head>
+<body onload="init();">
+  <div id="top_nav">
+    <button onclick="ws.send('CLEAR|')">Clear</button>
+    <button onclick="ws.send('RELOAD_CLIENTS|5')">Reload Clients</button>
+    <button onclick="ws.send('RELOAD|10')">Show 10</button>
+    <button onclick="ws.send('RELOAD|20')">Show 20</button>
+    <button onclick="ws.send('RELOAD|50')">Show 50</button>
+    <button onclick="ws.send('RELOAD|100')">Show 100</button>
+    <button onclick="ws.send('RELOAD|ALL')">Show ALL</button>
+  </div>
+  <div id="messages"></div>
+  <div id="Measure" class="msgtextShort message">
+      abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ
+  </div>
+</body>
+</html>
