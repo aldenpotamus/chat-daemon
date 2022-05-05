@@ -40,8 +40,8 @@ messageTemplate = Template('''{
     "id": "${id}",
     "userName": "${userName}",
     "time": "${time}",
-    "messageText": "${messageText}",
-    "messageHTML": "${messageHTML}",
+    "messageText": ${messageText},
+    "messageHTML": ${messageHTML},
     "service": "${service}",
     "serviceURL": "${serviceURL}",
     "eventType": "${eventType}",
@@ -75,8 +75,8 @@ def twitchMsgToJSON(msg, msgHTML):
       'id': id,
       'userName': msg['display_name'],
       'time': msg['event_time'],
-      'messageText': msg['message'],
-      'messageHTML': msgHTML,
+      'messageText': json.dumps(msg['message']),
+      'messageHTML': json.dumps(msgHTML),
       'service': 'Twitch',
       'serviceURL': 'img/twitch_badge_1024.png',
       'eventType': 'ChatMessage',
@@ -141,8 +141,8 @@ def youtubeMsgToJSON(msg, msgHTML):
       'id': id,
       'userName': msg.author.name,
       'time': msg.timestamp,
-      'messageText': msg.message,
-      'messageHTML': msgHTML,
+      'messageText': json.dumps(msg.message),
+      'messageHTML': json.dumps(msgHTML),
       'service': 'YouTube',
       'serviceURL': 'img/youtube_badge_1024.png',
       'eventType': msg.type,
@@ -195,7 +195,7 @@ async def on_ready():
         message = await discordChannel.send(content=links, file=picture)
 
     global discordThread
-    discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:9]+']',
+    discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:10]+']',
                                                        message=message,
                                                        auto_archive_duration=1440)
     print('1 Thread: '+str(discordThread))
