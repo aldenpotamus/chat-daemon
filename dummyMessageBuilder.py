@@ -16,7 +16,7 @@ messageTemplate = Template('''{
 dummyMessages = {
     'YT:ShortTextMessage': messageTemplate.safe_substitute({
         'id': 'null',
-        'userName': 'Aldenpotamus',
+        'userName': 'username',
         'time': '1650226633808',
         'messageText': 'short youtube message',
         'messageHTML': 'short youtube message',
@@ -27,7 +27,7 @@ dummyMessages = {
     }),
     'YT:LongTextMessage': messageTemplate.safe_substitute({
         'id': 'null',
-        'userName': 'Aldenpotamus',
+        'userName': 'username',
         'time': '1650226633808',
         'messageText': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
         'messageHTML': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
@@ -38,7 +38,7 @@ dummyMessages = {
     }),
     'TW:ShortTextMessage': messageTemplate.safe_substitute({
         'id': 'null',
-        'userName': 'Aldenpotamus',
+        'userName': 'username',
         'time': '1650226558.5448346',
         'messageText': 'short twitch message',
         'messageHTML': 'short twitch message',
@@ -49,7 +49,7 @@ dummyMessages = {
     }),
     'TW:LongTextMessage': messageTemplate.safe_substitute({
         'id': 'null',
-        'userName': 'Aldenpotamus',
+        'userName': 'username',
         'time': '1650226558.5448346',
         'messageText': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
         'messageHTML': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
@@ -60,7 +60,7 @@ dummyMessages = {
     }),
     'DC:ShortTextMessage': messageTemplate.safe_substitute({
         "id": "null",
-        "userName": "aldenpotamus",
+        "userName": "username",
         "time": "966188396810743848",
         "messageText": "short discord message",
         "messageHTML": "short discord message",
@@ -71,7 +71,7 @@ dummyMessages = {
     }),
     'DC:LongTextMessage': messageTemplate.safe_substitute({
         "id": "null",
-        "userName": "aldenpotamus",
+        "userName": "username",
         "time": "966188396810743848",
         'messageText': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
         'messageHTML': 'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.',
