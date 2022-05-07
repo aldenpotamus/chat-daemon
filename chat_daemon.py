@@ -1,27 +1,26 @@
 import asyncio
 import configparser
-from collections import defaultdict
-import json
-import discord
-from enum import Enum
-import functools
 import http.server
-from io import BytesIO
+import json
 import logging
+import socketserver
+import sys
+import threading
+import uuid
+from collections import defaultdict
+from io import BytesIO
 from os.path import exists
-from PIL import Image
+from string import Template
+
+import discord
 import pytchat
+import requests
+import twitch
+from PIL import Image
 from pytchat import LiveChatAsync
 from pywitch import PyWitchTMI
 from pyyoutube import Api
-import requests
-import socketserver
-from string import Template
-import sys
-import threading
-import twitch
 from websocket_server import WebsocketServer
-import uuid
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -191,7 +190,7 @@ async def on_ready():
         croppedBytes.seek(0)
 
         picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
-        links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/aldenpotamus>'
+        links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
         message = await discordChannel.send(content=links, file=picture)
 
     global discordThread
