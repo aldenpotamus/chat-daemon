@@ -158,7 +158,6 @@ def youtubeEmoteSubs(substitutionText):
         if isinstance(item, str):
             msg += item
         else:
-            print(item)
             msg += youtubeEmoteTemplate.safe_substitute({'imgURL': item['url']})
 
     return msg
