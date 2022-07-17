@@ -21,6 +21,7 @@ from pytchat import LiveChatAsync
 from pywitch import PyWitchTMI
 from pyyoutube import Api
 from websocket_server import WebsocketServer
+import re
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -47,6 +48,7 @@ messageTemplate = Template('''{
     "avatarURL": "${avatarURL}"
 }''')
 twitchEmoteTemplate = Template('<img src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
+discordEmoteTemplate = Template('<img src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img src=\'${imgURL}\'/>')
 
 # TWITCH
@@ -131,7 +133,7 @@ async def  youtubeCallback(dataList):
     for data in dataList.items:
         print(str(data))
         messageHTML = youtubeEmoteSubs(data.messageEx)
-        websocketServer.send_message_to_all('MSG|'+youtubeMsgToJSON(data,messageHTML))
+        websocketServer.send_message_to_all('MSG|'+youtubeMsgToJSON(data, messageHTML))
         discordSendMsg(':red_square: **'+data.author.name+'**', "YouTube", data.message)
 
 def youtubeMsgToJSON(msg, msgHTML):
@@ -201,9 +203,17 @@ async def on_ready():
 @discordClient.event
 async def on_message(message):
     global discordThread
-    print('[DISCORD] Message: '+str(message))
     if not message.author.bot and message.channel.id == discordThread.id:
-        websocketServer.send_message_to_all('MSG|'+discordMsgToJSON(message, message.clean_content))
+        print('[DISCORD] Message: '+str(message))
+        messageHTML = discordEmoteSubs(message.clean_content)
+        print(messageHTML)
+        websocketServer.send_message_to_all('MSG|'+discordMsgToJSON(message, messageHTML))
+
+@discordClient.event
+async def on_raw_reaction_add(reaction):
+    global discordThread
+    if reaction.channel.id == discordThread.id:
+        print('[DISCORD] Reaction: '+str(reaction))
 
 async def waitAndSendDiscordMessage(message):
     global discordThread
@@ -220,7 +230,7 @@ def discordMsgToJSON(msg, msgHTML):
       'userName': msg.author.name,
       'time': msg.id,
       'messageText': json.dumps(msg.content),
-      'messageHTML': json.dumps(msg.clean_content),
+      'messageHTML': json.dumps(msgHTML),
       'service': 'Discord',
       'serviceURL': 'img/discord_badge_1024.png',
       'eventType': msg.type,
@@ -229,6 +239,10 @@ def discordMsgToJSON(msg, msgHTML):
     messageLog[id] = message
     messageLogOrdered.append(message)
     return message
+
+discordEmotePattern = re.compile(r'<:[^:]*:([0-9]+)>')
+def discordEmoteSubs(messageText):
+    return discordEmotePattern.sub(discordEmoteTemplate.safe_substitute({'id': r'\1'}), messageText)
 
 # WEBSOCKETS
 def clientJoin(client, server):
