@@ -1,5 +1,6 @@
 import asyncio
 import configparser
+from email.errors import MessageError
 import http.server
 import json
 import logging
@@ -23,7 +24,6 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
-
 disableDiscordThread = True
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -39,18 +39,6 @@ hiddenIds = defaultdict(lambda: False)
 twitchProfileCache = {}
 
 discordToWebIdMap = {}
-
-# messageTemplate = Template('''{
-#     "id": "${id}",
-#     "userName": "${userName}",
-#     "time": "${time}",
-#     "messageText": ${messageText},
-#     "messageHTML": ${messageHTML},
-#     "service": "${service}",
-#     "serviceURL": "${serviceURL}",
-#     "eventType": "${eventType}",
-#     "avatarURL": "${avatarURL}"
-# }''')
 
 twitchEmoteTemplate = Template('<img src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
 discordEmoteTemplate = Template('<img class=\'${class}\' src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
@@ -219,10 +207,26 @@ async def on_message(message):
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))
         messageHTML = discordEmoteSubs(message.clean_content)
-        print(messageHTML)
-        (id, messageDict) = discordMsgToJSON(message, messageHTML)
+        
+        images = [image.url for image in message.attachments + message.stickers]
+        for embed in message.embeds:
+            images.append(get_gif_url(embed.url))
+
+        (id, messageDict) = discordMsgToJSON(message, messageHTML, images)
         discordToWebIdMap[message.id] = id
         websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
+        if len(images) > 0:
+            websocketServer.send_message_to_all('HIDE|'+id)
+
+def get_gif_url(view_url):
+    # Get the page content
+    page_content = requests.get(view_url).text
+
+    # Regex to find the URL on the c.tenor.com domain that ends with .gif
+    regex = r"(?i)\b((https?://c[.]tenor[.]com/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))[.]gif)"
+
+    # Find and return the first match
+    return re.findall(regex, page_content)[0][0]
 
 @discordClient.event
 async def on_raw_reaction_add(reaction):
@@ -253,7 +257,7 @@ def discordSendMsg(user, webMsgId, message):
     print('Requesting Send:' +message)
     asyncio.run_coroutine_threadsafe(waitAndSendDiscordMessage(user+": "+message, webMsgId), loop=discordClient.loop)
 
-def discordMsgToJSON(msg, msgHTML):
+def discordMsgToJSON(msg, msgHTML, images=None):
     id = uuid.uuid4().hex
     messageDict = {
       'id': id,
@@ -265,7 +269,8 @@ def discordMsgToJSON(msg, msgHTML):
       'serviceURL': 'img/discord_badge_1024.png',
       'eventType': msg.type,
       'avatarURL': msg.author.avatar.url,
-      'reactions': []
+      'reactions': [],
+      'images': images
     }
     messageLog[id] = messageDict
     messageLogOrdered.append(messageDict)
@@ -372,10 +377,6 @@ def processMessage(numMessagesStr):
         messages = messageLogOrdered[-int(numMessagesStr):]
 
     messages.reverse()
-    # messagesStr = '['
-    # for m in messages:
-    #     messagesStr +=json.dumps(m)+','
-    # messagesStr = messagesStr[:-1]+']'
     messagesStr = json.dumps(messages)
 
     return messagesStr
