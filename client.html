@@ -3,6 +3,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Emoji:wght@700&display=swap" rel="stylesheet">
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
@@ -12,14 +13,17 @@
     .pinned {background-color: rgb(255 255 0 / 15%); border-radius: 40px;}
     .messages-top {height: 620px; width: 1000px; display: flex;flex-direction: column;}
     .messages-bottom {height: 620px; width: 1000px; display: flex;flex-direction: column-reverse;}
+    .reactions { position: absolute; display: inline-block; background-color: #000000; height: 22; top: 50px; left: 173px; font-family: 'Noto Emoji'; color: #ffffff; border-radius: 11px; overflow: hidden;}
+    .reaction {vertical-align: top; font-size: 19;}
+    .customReaction {height: 21px; margin-left: 2px;} 
     .portrait {position:absolute;clip-path: circle(30px at center);width: 64px;height: 64px;}
     .overlay {position:absolute; top: 7px; height: 64px; width: 64px;}
     .message {position: relative; height: 64px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
     .twitchUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
     .youtubeUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
     .discordUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #516DF8; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
-    .msgtext {color: #FFFFFF; position:absolute; padding-left: 10px; left: 59px; top: 7px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;}
-    .msgtextShort {color: #FFFFFF; position:absolute; padding-left: 10px; left: 62px; top: 21px; word-wrap:break-word; width: 931px; white-space: normal;text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size: 20px;}
+    .msgtext {color: #FFFFFF; position:absolute; padding-left: 10px; left: 59px; top: 7px; word-wrap:break-word; width: 931px; white-space: normal; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;}
+    .msgtextShort {color: #FFFFFF; position:absolute; padding-left: 10px; left: 62px; top: 21px; word-wrap:break-word; width: 931px; white-space: normal; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size: 20px;}
     button {margin-left: 10px;}
 
     #Measure { position: absolute; visibility: hidden; height: auto; width: auto; white-space: nowrap; }
@@ -109,8 +113,6 @@
     function isSmall(span) {
       var test = document.getElementById("Measure");
       test.innerHTML = span.innerHTML;
-
-      console.log(test.clientWidth + 1)
       return ((test.clientWidth + 1) < 931);
     }
 
@@ -138,6 +140,9 @@
         case 'DUMMY':
         case 'MSG':
           showMessage(JSON.parse(param));
+        break;
+        case 'REACTION':
+          reactToMessage(param);
         break;
         case 'PIN':
           pinMessage(param);
@@ -206,11 +211,20 @@
       message.innerHTML = username+portrait+serviceOverlay;
       message.appendChild(messageText)
 
+      reactions = document.createElement('div');
+      reactions.classList.add('reactions');
+      message.appendChild(reactions);
+
+      json.reactions.forEach(reaction => {
+        console.log('Adding reaction: '+reaction);
+        reactions.innerHTML += "<span class='reaction'>"+reaction+"</span>";
+      });
+
       if(isAdmin){
         var controls = document.createElement('div');
         controls.style.position = 'absolute';
-        controls.style.left = 200;
-        controls.style.top = 51;
+        controls.style.left = 740;
+        controls.style.top = 50;
 
         var dismissButton = document.createElement('button');
         dismissButton.id = 'Dismiss'+message.id;
@@ -273,6 +287,16 @@
       }
     }
 
+    function reactToMessage(reaction) {
+      var [spanHTML, messageId] = reaction.split('@');
+      console.log("MessageId: "+messageId);
+      console.log("SpanHTML: "+spanHTML);
+
+      messageNeedingReaction = document.getElementById(messageId);
+      reactions = messageNeedingReaction.querySelector('.reactions');
+      reactions.innerHTML += "<span class='reaction'>"+spanHTML+"</span>";
+    }
+
     function pinMessage(msgId) {
       msgDiv = document.getElementById(msgId);
 
@@ -303,7 +327,7 @@
         }
         msgDiv.classList.remove('hide');
       } else {
-        console.log('Message not found to unhide... this should not happen.')
+        console.log('Message not found to unhide... this should not happen. ['+msgId+']')
       }
     }
 

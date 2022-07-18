@@ -23,6 +23,8 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
+
+disableDiscordThread = True
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
 
@@ -36,56 +38,60 @@ pinnedIds = defaultdict(lambda: False)
 hiddenIds = defaultdict(lambda: False)
 twitchProfileCache = {}
 
-messageTemplate = Template('''{
-    "id": "${id}",
-    "userName": "${userName}",
-    "time": "${time}",
-    "messageText": ${messageText},
-    "messageHTML": ${messageHTML},
-    "service": "${service}",
-    "serviceURL": "${serviceURL}",
-    "eventType": "${eventType}",
-    "avatarURL": "${avatarURL}"
-}''')
+discordToWebIdMap = {}
+
+# messageTemplate = Template('''{
+#     "id": "${id}",
+#     "userName": "${userName}",
+#     "time": "${time}",
+#     "messageText": ${messageText},
+#     "messageHTML": ${messageHTML},
+#     "service": "${service}",
+#     "serviceURL": "${serviceURL}",
+#     "eventType": "${eventType}",
+#     "avatarURL": "${avatarURL}"
+# }''')
+
 twitchEmoteTemplate = Template('<img src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
-discordEmoteTemplate = Template('<img src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
+discordEmoteTemplate = Template('<img class=\'${class}\' src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img src=\'${imgURL}\'/>')
 
 # TWITCH
 def twitchCallback(data):
     global websocketServer
-    print('TWITCH')
     print(data)
+
     if data['display_name'] not in twitchProfileCache.keys():
         for user in twitchDataAPI.users([data['display_name']]):
             print('Got offline profile picture for '+data['display_name'])
-            print(user.profile_image_url)
             twitchProfileCache[data['display_name']] = user.profile_image_url
 
     messageWithEmote = twitchEmoteSubs(data['message'],
                                        [e for e in data['event_raw'].split(';') if e.startswith('emotes')][0])
-    print(messageWithEmote)
 
     data['avatarURL'] = twitchProfileCache[data['display_name']]
-    websocketServer.send_message_to_all('MSG|'+twitchMsgToJSON(data, messageWithEmote))
-    discordSendMsg(':purple_square: **'+data['display_name']+"**", "Twitch", data['message'])
+    (messageId, messageDict) = twitchMsgToJSON(data, messageWithEmote)
+    websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
+    discordSendMsg(':purple_square: **'+data['display_name']+"**", messageId, data['message'])
 
+twitchIdParser = re.compile(r';id=([^;]+)')
 def twitchMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
-    message = messageTemplate.safe_substitute({
-      'id': id,
-      'userName': msg['display_name'],
-      'time': msg['event_time'],
-      'messageText': json.dumps(msg['message']),
-      'messageHTML': json.dumps(msgHTML),
-      'service': 'Twitch',
-      'serviceURL': 'img/twitch_badge_1024.png',
-      'eventType': 'ChatMessage',
-      'avatarURL': msg['avatarURL']
-    })
-    messageLog[id] = message
-    messageLogOrdered.append(message)
-    return message
+    messageDict = {   
+        'id': id,
+        'userName': msg['display_name'],
+        'time': msg['event_time'],
+        'messageText': msg['message'],
+        'messageHTML': msgHTML,
+        'service': 'Twitch',
+        'serviceURL': 'img/twitch_badge_1024.png',
+        'eventType': 'ChatMessage',
+        'avatarURL': msg['avatarURL'],
+        'reactions': []
+    }
+    messageLog[id] = messageDict
+    messageLogOrdered.append(messageDict)
+    return (id, messageDict)
 
 def twitchEmoteSubs(messageText, substitutionText):
     msg = messageText
@@ -128,30 +134,32 @@ async def youtubeStart():
     except Exception as e:
         print(type(e), str(e))
 
-async def  youtubeCallback(dataList):
+async def youtubeCallback(dataList):
     global websocketServer
     for data in dataList.items:
         print(str(data))
         messageHTML = youtubeEmoteSubs(data.messageEx)
-        websocketServer.send_message_to_all('MSG|'+youtubeMsgToJSON(data, messageHTML))
-        discordSendMsg(':red_square: **'+data.author.name+'**', "YouTube", data.message)
+        (messageId, messageDict) = youtubeMsgToJSON(data, messageHTML)
+        websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
+        discordSendMsg(':red_square: **'+data.author.name+'**', messageId, data.message)
 
 def youtubeMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
-    message = messageTemplate.safe_substitute({
+    messageDict = {
       'id': id,
       'userName': msg.author.name,
       'time': msg.timestamp,
-      'messageText': json.dumps(msg.message),
-      'messageHTML': json.dumps(msgHTML),
+      'messageText': msg.message,
+      'messageHTML': msgHTML,
       'service': 'YouTube',
       'serviceURL': 'img/youtube_badge_1024.png',
       'eventType': msg.type,
-      'avatarURL': msg.author.imageUrl
-    })
-    messageLog[id] = message
-    messageLogOrdered.append(message)
-    return message
+      'avatarURL': msg.author.imageUrl,
+      'reactions': []
+    }
+    messageLog[id] = messageDict
+    messageLogOrdered.append(messageDict)
+    return (id, messageDict)
 
 def youtubeEmoteSubs(substitutionText):
     msg = ''
@@ -179,26 +187,31 @@ def discordClientThreadTarget():
 async def on_ready():
     global CONFIG
     print('[DISCORD] We have logged in as {0.user}'.format(discordClient))
-    discordChannel = discordClient.get_channel(965324208362111076)
-
-    global youtubeAPI, youtubeVideoId
-    videoData = youtubeAPI.get_video_by_id(video_id=youtubeVideoId)
-    with requests.get(videoData.items[0].snippet.thumbnails.standard.url) as r:
-        img = Image.open(BytesIO(r.content), mode='r', formats=['JPEG'])
-        tmpImg = img.crop((0,60,640,420))
-        croppedBytes = BytesIO()
-        tmpImg.save(croppedBytes, format='PNG')
-        croppedBytes.seek(0)
-
-        picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
-        links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
-        message = await discordChannel.send(content=links, file=picture)
-
+    
     global discordThread
-    discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:10]+']',
-                                                       message=message,
-                                                       auto_archive_duration=1440)
-    print('1 Thread: '+str(discordThread))
+    if disableDiscordThread:
+        discordChannel = discordClient.get_channel(998310893387534367) #Test Channel
+        discordThread = discordClient.get_channel(998310893387534367) #Test Channel
+    else:
+        discordChannel = discordClient.get_channel(965324208362111076)
+
+        global youtubeAPI, youtubeVideoId
+        videoData = youtubeAPI.get_video_by_id(video_id=youtubeVideoId)
+        with requests.get(videoData.items[0].snippet.thumbnails.standard.url) as r:
+            img = Image.open(BytesIO(r.content), mode='r', formats=['JPEG'])
+            tmpImg = img.crop((0,60,640,420))
+            croppedBytes = BytesIO()
+            tmpImg.save(croppedBytes, format='PNG')
+            croppedBytes.seek(0)
+
+            picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
+            links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
+            message = await discordChannel.send(content=links, file=picture)
+
+        discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:10]+']',
+                                                        message=message,
+                                                        auto_archive_duration=1440)
+        print('1 Thread: '+str(discordThread))
 
 @discordClient.event
 async def on_message(message):
@@ -207,38 +220,56 @@ async def on_message(message):
         print('[DISCORD] Message: '+str(message))
         messageHTML = discordEmoteSubs(message.clean_content)
         print(messageHTML)
-        websocketServer.send_message_to_all('MSG|'+discordMsgToJSON(message, messageHTML))
+        (id, messageDict) = discordMsgToJSON(message, messageHTML)
+        discordToWebIdMap[message.id] = id
+        websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
 
 @discordClient.event
 async def on_raw_reaction_add(reaction):
     global discordThread
-    if reaction.channel.id == discordThread.id:
+    if reaction.channel_id == discordThread.id:
         print('[DISCORD] Reaction: '+str(reaction))
+        
+        messageId = reaction.message_id
+        if messageId in discordToWebIdMap.keys():
+            messageId = discordToWebIdMap[messageId]
 
-async def waitAndSendDiscordMessage(message):
+        websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[messageId]))
+        websocketServer.send_message_to_all('UNHIDE|'+messageId)
+        if reaction.emoji.id:
+            reactionImage = discordEmoteTemplate.safe_substitute({'id': reaction.emoji.id, 'class': 'customReaction'})
+            reactionInnerHTML = reactionImage
+        else:
+            reactionInnerHTML = reaction.emoji.name
+        websocketServer.send_message_to_all('REACTION|'+reactionInnerHTML+"@"+str(messageId))
+        messageLog[messageId]['reactions'].append(reactionInnerHTML)
+
+async def waitAndSendDiscordMessage(message, webMsgId):
     global discordThread
-    await discordThread.send(message)
+    message = await discordThread.send(message)
+    discordToWebIdMap[message.id] = webMsgId 
 
-def discordSendMsg(user, service, message):
+def discordSendMsg(user, webMsgId, message):
     print('Requesting Send:' +message)
-    asyncio.run_coroutine_threadsafe(waitAndSendDiscordMessage(user+": "+message), loop=discordClient.loop)
+    asyncio.run_coroutine_threadsafe(waitAndSendDiscordMessage(user+": "+message, webMsgId), loop=discordClient.loop)
 
 def discordMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
-    message = messageTemplate.safe_substitute({
+    messageDict = {
       'id': id,
       'userName': msg.author.name,
       'time': msg.id,
-      'messageText': json.dumps(msg.content),
-      'messageHTML': json.dumps(msgHTML),
+      'messageText': msg.content,
+      'messageHTML': msgHTML,
       'service': 'Discord',
       'serviceURL': 'img/discord_badge_1024.png',
       'eventType': msg.type,
-      'avatarURL': msg.author.avatar.url
-    })
-    messageLog[id] = message
-    messageLogOrdered.append(message)
-    return message
+      'avatarURL': msg.author.avatar.url,
+      'reactions': []
+    }
+    messageLog[id] = messageDict
+    messageLogOrdered.append(messageDict)
+    return (id, messageDict)
 
 discordEmotePattern = re.compile(r'<:[^:]*:([0-9]+)>')
 def discordEmoteSubs(messageText):
@@ -268,7 +299,7 @@ def clientMessage(client, server, message):
             print('Pin Message: '+param)
             pinnedIds[param] = True
             hiddenIds[param] = False
-            websocketServer.send_message_to_all('MSG|'+messageLog[param])
+            websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[param]))
             websocketServer.send_message_to_all('UNHIDE|'+param)
             websocketServer.send_message_to_all('PIN|'+param)
             return
@@ -285,7 +316,7 @@ def clientMessage(client, server, message):
         case 'UNHIDE':
             print('Showing Message: '+param)
             hiddenIds[param] = False
-            websocketServer.send_message_to_all('MSG|'+messageLog[param])
+            websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[param]))
             websocketServer.send_message_to_all('UNHIDE|'+param)
             if pinnedIds[param]:
                 websocketServer.send_message_to_all('PIN|'+param)
@@ -341,10 +372,11 @@ def processMessage(numMessagesStr):
         messages = messageLogOrdered[-int(numMessagesStr):]
 
     messages.reverse()
-    messagesStr = '['
-    for m in messages:
-        messagesStr +=m+','
-    messagesStr = messagesStr[:-1]+']'
+    # messagesStr = '['
+    # for m in messages:
+    #     messagesStr +=json.dumps(m)+','
+    # messagesStr = messagesStr[:-1]+']'
+    messagesStr = json.dumps(messages)
 
     return messagesStr
 
