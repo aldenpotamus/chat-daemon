@@ -24,7 +24,7 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
-disableDiscordThread = True
+disableDiscordThread = False
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
 

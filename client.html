@@ -9,19 +9,19 @@
 
   <style>
     body {background-color: transparent; --MESAGES-ALIGN:BOTTOM-EDGE; --MESSAGE_INSERT:TOP; --MESSAGE_TIMEOUT:20000; --ADMIN_MESAGES-ALIGN:TOP-EDGE; --ADMIN_MESSAGE_INSERT:TOP; --ADMIN_MESSAGE_TIMEOUT:NEVER} /*NORMAL*/
-    .hide {visibility:hidden; background-color: rgb(0 0 0 / 35%); border-radius: 40px; background: radial-gradient(circle at 0px, #333, #333 75px, rgb(0 0 0 / 20%) 350px, #333 1388px);}
-    .pinned {background-color: rgb(255 255 0 / 15%); border-radius: 40px;}
+    .hide {visibility:hidden; background-image: linear-gradient(45deg, #00000040 25%, transparent 25%, transparent 50%, #00000040 50%, #00000040 75%, transparent 75%, #fff); background-size: 5px 5px; border: #4a4a4a; border-width: 3px; border-style: solid; border-radius: 40px;}
+    .pinned {border: #ffe600; border-width: 3px; border-style: solid; border-radius: 40px;}
     .messages-top {height: 620px; width: 1000px; display: flex;flex-direction: column;}
     .messages-bottom {height: 620px; width: 1000px; display: flex;flex-direction: column-reverse;}
-    .reactions { position: absolute; display: flex; background-color: #000000; height: 23; top: 50px; left: 173px; font-family: 'Noto Emoji'; color: #ffffff; border-radius: 11px; overflow: hidden;}
+    .reactions {position: absolute; display: flex; background-color: #000000; height: 23; top: 50px; left: 200px; font-family: 'Noto Emoji'; color: #ffffff; border-radius: 11px; overflow: hidden; z-index: 10;}
     .reaction {vertical-align: top; font-size: 19;}
     .customReaction {height: 21px; margin-left: 2px;} 
     .portrait {position:absolute;clip-path: circle(30px at center);width: 64px;height: 64px;}
     .overlay {position:absolute; top: 7px; height: 64px; width: 64px;}
     .textMessage {position: relative; height: 64px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
     .imageMessage {display: inline-block; z-index: 10; position: relative; height: 320px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
-    .imgDecoration {left: 5px; position: absolute; top: 239px;}
-    .textDecoration {position: absolute; top: 0px;}
+    .imgDecoration {left: 5px; position: absolute; top: 239px; display: contents;}
+    .textDecoration {display: contents; position: absolute; top: 0px;}
     .msgImage {height:270px; margin-left: 68px}
     .twitchUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
     .youtubeUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
@@ -193,7 +193,7 @@
 
       var messageContents;
 
-      if(json.images.length > 0) {
+      if(json && json.images && json.images.length > 0) {
         message.classList.add('imageMessage');
         messageContents = document.createElement('span');
         messageContents.classList.add('imageMessage');
