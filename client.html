@@ -18,14 +18,22 @@
     .customReaction {height: 21px; margin-left: 2px;} 
     .portrait {position:absolute;clip-path: circle(30px at center);width: 64px;height: 64px;}
     .overlay {position:absolute; top: 7px; height: 64px; width: 64px;}
+
+    .imgReactions {position: absolute; display: flex; background-color: #000000; height: 23; top: 307px; left: 200px; font-family: 'Noto Emoji'; color: #ffffff; border-radius: 11px; overflow: hidden; z-index: 10;}
+    .imgPortrait {left: 5px; top: 263px;position:absolute;clip-path: circle(30px at center);width: 64px;height: 64px;}
+    .imgOverlay {position:absolute; top: 264px; height: 64px; width: 64px; left: 5px;}
+    .imgTwitchUsername {position:absolute; left: 72px; top: 310px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .imgYoutubeUsername {position:absolute; left: 72px; top: 310px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .imgDiscordUsername {position:absolute; left: 72px; top: 310px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #516DF8; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+
     .textMessage {position: relative; height: 64px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
     .imageMessage {display: inline-block; z-index: 10; position: relative; height: 320px; padding-left: 5px; padding-top: 5px; padding-bottom: 5px; font-family: 'Open Sans', sans-serif; font-size: 14px; overflow: hidden; min-height: 64px; margin-top: 5px;}
-    .imgDecoration {left: 5px; position: absolute; top: 239px; display: contents;}
-    .textDecoration {display: contents; position: absolute; top: 0px;}
+    .imgDecoration {display: contents;}
+    .textDecoration {display: contents;}
     .msgImage {height:270px; margin-left: 68px}
-    .twitchUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
-    .youtubeUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
-    .discordUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #516DF8; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .TwitchUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #6441a5; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .YoutubeUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #FF0000; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
+    .DiscordUsername {position:absolute; left: 72px; top: 53px; font-size: 12px; color: #FFFFFF; z-index: 1; background-color: #516DF8; border-radius: 4px; padding-left: 3px; padding-right: 3px; }
     .msgtext {color: #FFFFFF; position:absolute; padding-left: 10px; left: 59px; top: 7px; word-wrap:break-word; width: 931px; white-space: normal; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;}
     .msgtextShort {color: #FFFFFF; position:absolute; padding-left: 10px; left: 62px; top: 21px; word-wrap:break-word; width: 931px; white-space: normal; text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; font-size: 20px;}
     button {margin-left: 10px;}
@@ -67,9 +75,9 @@
     var LONG_EMOTE_HEIGHT = 14;
 
     var usernameStyles = {
-      'Twitch': 'twitchUsername',
-      'YouTube': 'youtubeUsername',
-      'Discord': 'discordUsername'
+      'Twitch': 'TwitchUsername',
+      'YouTube': 'YoutubeUsername',
+      'Discord': 'DiscordUsername'
     }
 
     function init() {
@@ -194,6 +202,11 @@
       var messageContents;
 
       if(json && json.images && json.images.length > 0) {
+        serviceOverlay = "<img class='imgOverlay' src='"+json.serviceURL+"'\>"
+
+        var portrait = "<img class='imgPortrait' referrerpolicy='no-referrer' src='"+portraitImg+"'\>"
+        var username = "<span class='img"+(usernameStyles[json.service])+"'>"+json.userName+"</span>"
+        
         message.classList.add('imageMessage');
         messageContents = document.createElement('span');
         messageContents.classList.add('imageMessage');
@@ -201,7 +214,28 @@
         var bodyImage = "<img class='msgImage' referrerpolicy='no-referrer' src='"+json.images[0]+"'\>"
         messageContents.innerHTML = bodyImage;
         verticalStyle = 'imgDecoration'
+
+        message.classList.add('fadePopInAndStay');     
+        message.appendChild(messageContents)
+        decorations = document.createElement('span');
+        decorations.classList.add(verticalStyle);
+        decorations.innerHTML = username+portrait+serviceOverlay;
+        message.appendChild(decorations)
+
+        reactions = document.createElement('div');
+        reactions.classList.add('imgReactions');
+        decorations.appendChild(reactions);
+
+        json.reactions.forEach(reaction => {
+          console.log('Adding reaction: '+reaction);
+          reactions.innerHTML += "<span class='imgReaction'>"+reaction+"</span>";
+        });
       } else {
+        serviceOverlay = "<img class='overlay' src='"+json.serviceURL+"'\>"
+
+        var portrait = "<img class='portrait' referrerpolicy='no-referrer' src='"+portraitImg+"'\>"
+        var username = "<span class='"+(usernameStyles[json.service])+"'>"+json.userName+"</span>"
+        
         message.classList.add('textMessage');
 
         messageContents = document.createElement('span');
@@ -225,24 +259,24 @@
           }
         }
         verticalStyle = 'textDecoration'
-        
+
+        message.classList.add('fadePopInAndStay');     
+        message.appendChild(messageContents)
+        decorations = document.createElement('span');
+        decorations.classList.add(verticalStyle);
+        decorations.innerHTML = username+portrait+serviceOverlay;
+        message.appendChild(decorations)
+
+        reactions = document.createElement('div');
+        reactions.classList.add('reactions');
+        decorations.appendChild(reactions);
+
+        json.reactions.forEach(reaction => {
+          console.log('Adding reaction: '+reaction);
+          reactions.innerHTML += "<span class='reaction'>"+reaction+"</span>";
+        });
+
       }
-
-      message.classList.add('fadePopInAndStay');     
-      message.appendChild(messageContents)
-      decorations = document.createElement('span');
-      decorations.classList.add(verticalStyle);
-      decorations.innerHTML = username+portrait+serviceOverlay;
-      message.appendChild(decorations)
-
-      reactions = document.createElement('div');
-      reactions.classList.add('reactions');
-      decorations.appendChild(reactions);
-
-      json.reactions.forEach(reaction => {
-        console.log('Adding reaction: '+reaction);
-        reactions.innerHTML += "<span class='reaction'>"+reaction+"</span>";
-      });
 
       if(isAdmin){
         var controls = document.createElement('div');
@@ -318,6 +352,9 @@
 
       messageNeedingReaction = document.getElementById(messageId);
       reactions = messageNeedingReaction.querySelector('.reactions');
+      if(!reactions) {
+        reactions = messageNeedingReaction.querySelector('.imgReactions');
+      }
       reactions.innerHTML += "<span class='reaction'>"+spanHTML+"</span>";
     }
 

@@ -25,6 +25,8 @@ from websocket_server import WebsocketServer
 import re
 
 disableDiscordThread = False
+testThread = 998310893387534367
+
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
 
@@ -178,8 +180,8 @@ async def on_ready():
     
     global discordThread
     if disableDiscordThread:
-        discordChannel = discordClient.get_channel(998310893387534367) #Test Channel
-        discordThread = discordClient.get_channel(998310893387534367) #Test Channel
+        discordChannel = discordClient.get_channel(testThread) #Test Channel
+        discordThread = discordClient.get_channel(testThread) #Test Channel
     else:
         discordChannel = discordClient.get_channel(965324208362111076)
 
