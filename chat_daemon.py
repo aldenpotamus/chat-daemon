@@ -15,6 +15,7 @@ from string import Template
 
 import discord
 import pytchat
+# from ..pytchat import pytchat
 import requests
 import twitch
 from PIL import Image
@@ -24,7 +25,7 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
-disableDiscordThread = False
+disableDiscordThread = True
 testThread = 998310893387534367
 
 logger = logging.getLogger('discord')
@@ -270,7 +271,7 @@ def discordMsgToJSON(msg, msgHTML, images=None):
       'service': 'Discord',
       'serviceURL': 'img/discord_badge_1024.png',
       'eventType': msg.type,
-      'avatarURL': msg.author.avatar.url,
+      'avatarURL': './img/blank_profile_pic.png' if  msg.author.avatar is None else msg.author.avatar.url,
       'reactions': [],
       'images': images
     }

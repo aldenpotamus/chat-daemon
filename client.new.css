@@ -1,0 +1,200 @@
+body {
+    background-color: transparent;
+}
+
+/* ADMIN SETTINGS */
+body.admin {
+    background-color: black;
+}
+
+body.non-admin > #admin-controls {
+    display: none;
+}
+
+body.admin > #messages {
+    flex-direction: column-reverse;
+}
+
+body.admin > #messages > .message {
+    background-color: gray;
+}
+
+/* MESSAGE */
+#messages {
+    display: flex;
+    flex-direction: column;
+    gap: .75em;
+    margin: 0.5em;
+    padding-inline-start: 0px;
+}
+
+#messages > .message {
+    padding: 5px 5px 5px 5px;
+    min-height: 60px;
+    align-items: end;
+    display: flex;
+    flex-direction: row;
+    border-radius: 4px;
+}
+
+#messages > .message > .content {
+    margin-left: 15px;
+    margin-bottom: 20px;
+    -webkit-text-stroke: 2px black;
+    font-family: 'Open Sans', sans-serif;
+    font-size: 32px;
+    color: white;
+}
+
+#messages > .long > .content {
+    font-size: 20px;
+    -webkit-text-stroke: 1.3px black;
+}
+
+#messages > .img > img {
+    max-height: 500px;
+    transform: translate(-60px, 0px); 
+}
+
+#messages > .img > span {
+    transform: translate(-60px, 0px); 
+}
+
+body.non-admin #messages > .message.hidden {
+    display: none;
+}
+
+body.non-admin #messages > .message.banned {
+    display: none !important;
+}
+
+body.admin #messages > .message.hidden {
+    opacity: 50%;
+}
+
+#messages > .message.pinned {
+    border-bottom-style: solid;
+    border-color: yellow;
+    border-width: 5px;
+}
+
+#messages > .message.banned {
+    border-bottom-style: solid;
+    border-color: red;
+    border-width: 5px;
+}
+
+#messages > .dismissed {
+    display: none;
+}
+
+/* MESSAGE DECODATIONS */
+.msg-decorations {
+    display: flex;
+    flex-direction: row;
+    z-index: 10;
+    width: 60px;
+}
+
+.msg-decorations > * > img {
+    width: 65px;
+    height: 65px;
+}
+
+.msg-decorations > #user-service {
+    transform: translate(-60px, 0px);
+}
+
+.msg-decorations > #user-pic > img {
+    border-radius: 100%;
+}
+
+.msg-decorations > #user-name {
+    color: white;
+    font-size: 15;
+    font-weight: bold;
+    max-height: 15px;
+    padding: 1px 3px 1px 3px;
+    border-radius: 4px;
+    transform: translate(-56px, 46px);
+    min-width: max-content;
+}
+
+.msg-decorations > #reactions {
+    width: 50px;
+    color: #ffffff;
+    background-color: black;
+    font-family: 'Noto Emoji';
+    min-width: max-content;
+    max-height: 20px;
+    border-radius: 8px;
+    transform: translate(-50px, 44px);
+}
+
+/* SERVICE SPECIFIC */
+.twitch > .msg-decorations > #user-name {
+    background-color: #6441a5;
+}
+
+.discord > .msg-decorations > #user-name {
+    background-color: #516DF8;
+}
+
+.youtube > .msg-decorations > #user-name {
+    background-color: #FF0000;
+}
+
+/* ADMIN BUTTONS */
+body.non-admin > #messages > * > .admin-btns {
+    display: none;
+}
+
+body.admin .admin-btns {
+    align-self: baseline;
+    margin-left: auto;
+
+    display: grid;
+    grid-template-columns: 30px 30px;
+    column-gap: 5px;
+    row-gap: 5px;
+}
+
+body.admin .admin-btns > button {
+    height: 30px;
+    width: 30px;
+
+    background-color: #ffffff !important;
+}
+
+body.admin .admin-btns > button {
+    background-size: contain !important;
+    border-radius: 4px;
+}
+
+body.admin .admin-btns > #pin {
+    background: url(img/pin.png) no-repeat;
+}
+
+body.admin .pinned > .admin-btns > #pin {
+    background-color: yellow !important;
+}
+
+body.admin .admin-btns > #visible {
+    background: url(img/visible_on.png) no-repeat;
+}
+
+body.admin .hidden > .admin-btns > #visible {
+    background: url(img/visible_off.png) no-repeat;
+}
+
+body.admin .admin-btns > #ban {
+    background: url(img/ban_off.png) no-repeat;
+}
+
+body.admin .banned > .admin-btns > #ban {
+    background: url(img/ban_on.png) no-repeat;
+}
+
+body.admin .admin-btns > #dismiss {
+    background: url(img/dismiss.png) no-repeat;
+}
