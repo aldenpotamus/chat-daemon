@@ -1,2 +1,4 @@
 config.ini
 dummy_messages.json
+client_secret.json
+*-oauth2.json

@@ -14,8 +14,11 @@ from os.path import exists
 from string import Template
 
 import discord
-import pytchat
-# from ..pytchat import pytchat
+
+sys.path.append("..")
+from yt_livechat.youtube_livechat import YoutubeLivechat
+from auth_manager.auth_manager import AuthManager
+
 import requests
 import twitch
 from PIL import Image
@@ -45,7 +48,7 @@ discordToWebIdMap = {}
 
 twitchEmoteTemplate = Template('<img src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
 discordEmoteTemplate = Template('<img class=\'${class}\' src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
-youtubeEmoteTemplate = Template('<img src=\'${imgURL}\'/>')
+youtubeEmoteTemplate = Template('<img alt= \'${alt}\' src=\'${src}\'/>')
 
 # TWITCH
 def twitchCallback(data):
@@ -111,41 +114,38 @@ def twitchEmoteSubs(messageText, substitutionText):
 # YOUTUBE
 youtubeAPI = None
 
-async def youtubeStart():
-    global CONFIG, youtubeAPI, youtubeVideoId
-    youtubeAPI = Api(api_key=CONFIG['AUTHENTICATION']['youtubeApiKey'])
-    livechat = LiveChatAsync(youtubeVideoId, callback=youtubeCallback)
-    while True:
-        await asyncio.sleep(1)
+def youtubeStart():
+    global CONFIG, youtubeVideoId
+    bcastService = AuthManager.get_authenticated_service("broadcast",
+                                                         clientSecretFile='client_secret.json',
+                                                         scopes=["https://www.googleapis.com/auth/youtube.force-ssl"])
 
-    try:
-        livechat.raise_for_status()
-    except pytchat.ChatDataFinished:
-        print("Chat data finished.")
-    except Exception as e:
-        print(type(e), str(e))
+    youtubeAPI = YoutubeLivechat(youtubeVideoId,
+                                 ytBcastService=bcastService,
+                                 callbacks=[youtubeCallback])
 
-async def youtubeCallback(dataList):
+    youtubeAPI.start()
+
+def youtubeCallback(message):
     global websocketServer
-    for data in dataList.items:
-        print(str(data))
-        messageHTML = youtubeEmoteSubs(data.messageEx)
-        (messageId, messageDict) = youtubeMsgToJSON(data, messageHTML)
-        websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
-        discordSendMsg(':red_square: **'+data.author.name+'**', messageId, data.message)
+
+    messageHTML = youtubeEmoteSubs(message['htmlText'])
+    (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
+    websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
+    discordSendMsg(':red_square: **'+message['authorDetails']['displayName']+'**', messageId, message['snippet']['textMessageDetails']['messageText'])
 
 def youtubeMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
     messageDict = {
       'id': id,
-      'userName': msg.author.name,
-      'time': msg.timestamp,
-      'messageText': msg.message,
+      'userName': msg['authorDetails']['displayName'],
+      'time': msg['snippet']['publishedAt'],
+      'messageText': msg['snippet']['textMessageDetails']['messageText'],
       'messageHTML': msgHTML,
       'service': 'YouTube',
       'serviceURL': 'img/youtube_badge_1024.png',
-      'eventType': msg.type,
-      'avatarURL': msg.author.imageUrl,
+      'eventType': msg['kind'],
+      'avatarURL': msg['authorDetails']['profileImageUrl'],
       'reactions': []
     }
     messageLog[id] = messageDict
@@ -156,10 +156,10 @@ def youtubeEmoteSubs(substitutionText):
     msg = ''
 
     for item in substitutionText:
-        if isinstance(item, str):
-            msg += item
-        else:
-            msg += youtubeEmoteTemplate.safe_substitute({'imgURL': item['url']})
+        if item['type'] == 'text':
+            msg += item['text']
+        elif item['type'] == 'img':
+            msg += youtubeEmoteTemplate.safe_substitute(item)
 
     return msg
 
@@ -186,9 +186,17 @@ async def on_ready():
     else:
         discordChannel = discordClient.get_channel(965324208362111076)
 
-        global youtubeAPI, youtubeVideoId
-        videoData = youtubeAPI.get_video_by_id(video_id=youtubeVideoId)
-        with requests.get(videoData.items[0].snippet.thumbnails.standard.url) as r:
+        global youtubeVideoId
+        videoDataService = AuthManager.get_authenticated_service("videolist",
+                                                                clientSecretFile='client_secret.json',
+                                                                scopes=["https://www.googleapis.com/auth/youtube.readonly"])
+        videoDataRequest = videoDataService.videos().list(
+            part="snippet,contentDetails,statistics",
+            id=youtubeVideoId)
+
+        videoDataResponse = videoDataRequest.execute()
+
+        with requests.get(videoDataResponse['items'][0]['snippet']['thumbnails']['standard']['url']) as r:
             img = Image.open(BytesIO(r.content), mode='r', formats=['JPEG'])
             tmpImg = img.crop((0,60,640,420))
             croppedBytes = BytesIO()
@@ -199,7 +207,7 @@ async def on_ready():
             links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
             message = await discordChannel.send(content=links, file=picture)
 
-        discordThread = await discordChannel.create_thread(name=videoData.items[0].snippet.title+' ['+videoData.items[0].snippet.publishedAt[0:10]+']',
+        discordThread = await discordChannel.create_thread(name=videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']',
                                                         message=message,
                                                         auto_archive_duration=1440)
         print('1 Thread: '+str(discordThread))
@@ -425,14 +433,12 @@ def main():
     discordClientThread.start()
 
     print("Connecting to YouTube...")
-    try:
-        asyncio.run(youtubeStart())
-    except asyncio.exceptions.CancelledError:
-        pass
+    youtubeStart()
 
 if __name__ == '__main__':
     print('Running for video: '+str(sys.argv[1]))
     youtubeVideoId = str(sys.argv[1])
+    del sys.argv[1]
 
     print('Parsing config file...')
     CONFIG = configparser.ConfigParser()

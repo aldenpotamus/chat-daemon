@@ -79,9 +79,11 @@ body.admin #messages > .message.hidden {
 }
 
 #messages > .message.banned {
-    border-bottom-style: solid;
+    /* border-bottom-style: solid;
     border-color: red;
-    border-width: 5px;
+    border-width: 5px; */
+    background-color: rgb(150, 0, 0) !important;
+    opacity: 25%;
 }
 
 #messages > .dismissed {
