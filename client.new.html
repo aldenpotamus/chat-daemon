@@ -28,14 +28,12 @@
 
 <body onload="init();">
     <div id="admin-controls">
-        <button onclick="ws.send('CLEAR|')">Clear</button>
-        <button onclick="ws.send('RELOAD_CLIENTS|5')">Reload Clients</button>
-        <button onclick="ws.send('RELOAD|10')">Show 10</button>
-        <button onclick="ws.send('RELOAD|20')">Show 20</button>
-        <button onclick="ws.send('RELOAD|50')">Show 50</button>
-        <button onclick="ws.send('RELOAD|100')">Show 100</button>
-        <button onclick="ws.send('RELOAD|ALL')">Show ALL</button>
-        <button onclick="testMessage()">Test Message</button>
+        <button onclick="clearMessages();">Clear</button>
+        <button onclick="reloadClients();">Reload Clients</button>
+        <button onclick="reloadClients(3);">Show 3</button>
+        <button onclick="reloadClients(5);">Show 5</button>
+        <button onclick="reloadClients(10);">Show 10</button>
+        <button onclick="testMessages();">Test Message</button>
     </div>
     <ul id="messages"></ul>
 </body>

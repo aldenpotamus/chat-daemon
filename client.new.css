@@ -1,10 +1,26 @@
+:root {
+    --vOffset: 85px;
+    --cThing: #ff0000;
+}
+
 body {
     background-color: transparent;
+    position: absolute;
+    width: 99%;
 }
 
 /* ADMIN SETTINGS */
 body.admin {
     background-color: black;
+}
+
+body.non-admin {
+    padding: 0px;
+    display: flex;
+    flex-direction: column-reverse;
+    margin: 0px;
+    overflow: hidden;
+    height: 100%;
 }
 
 body.non-admin > #admin-controls {
@@ -23,8 +39,8 @@ body.admin > #messages > .message {
 #messages {
     display: flex;
     flex-direction: column;
-    gap: .75em;
-    margin: 0.5em;
+    gap: 10px;
+    margin: 5px;
     padding-inline-start: 0px;
 }
 
@@ -37,6 +53,26 @@ body.admin > #messages > .message {
     border-radius: 4px;
 }
 
+body.non-admin #messages > .message.shiftup {
+    animation-name: riseup;
+    animation-duration: 0.2s;
+}
+
+@keyframes riseup {
+    from { transform: translate(0px, var(--vOffset)); animation-timing-function:ease-in-out }
+    to   { transform: translate(0px, 0px); animation-timing-function:ease-in-out }
+}
+
+body.non-admin #messages > .message.shiftleft {
+    animation-name: slideoff;
+    animation-duration: 1s;
+}
+
+@keyframes slideoff {
+    from { transform: translate(0px, 0px); animation-timing-function:ease-in-out }
+    to   { transform: translate(-100%, 0px); animation-timing-function:ease-in-out }
+}
+
 #messages > .message > .content {
     margin-left: 15px;
     margin-bottom: 20px;
@@ -46,6 +82,11 @@ body.admin > #messages > .message {
     color: white;
 }
 
+/* #messages > .message.img > .content {
+    position: absolute;
+    left: 580px;
+} */
+
 #messages > .long > .content {
     font-size: 20px;
     -webkit-text-stroke: 1.3px black;
@@ -53,6 +94,9 @@ body.admin > #messages > .message {
 
 #messages > .img > img {
     max-height: 500px;
+    max-width: 800px;
+    padding-left: 75px;
+    padding-bottom: 23px;
     transform: translate(-60px, 0px); 
 }
 
@@ -72,16 +116,26 @@ body.admin #messages > .message.hidden {
     opacity: 50%;
 }
 
-#messages > .message.pinned {
+body.admin #messages > .message.pinned {
     border-bottom-style: solid;
     border-color: yellow;
     border-width: 5px;
 }
 
+body.non-admin #messages > .message.pinned > .msg-decorations > #user-service::before {
+    content: "";
+    position: absolute;
+    width: 200%;
+    height: 200%;
+    top: -50%;
+    left: -50%;
+    z-index: -1;
+    transform: scale(.5) rotate(315deg) translate(42px, 55px);
+
+    background: url(img/pin_chat.png) no-repeat !important;
+}
+
 #messages > .message.banned {
-    /* border-bottom-style: solid;
-    border-color: red;
-    border-width: 5px; */
     background-color: rgb(150, 0, 0) !important;
     opacity: 25%;
 }
@@ -96,6 +150,7 @@ body.admin #messages > .message.hidden {
     flex-direction: row;
     z-index: 10;
     width: 60px;
+    filter: drop-shadow(3px 3px 3px black);
 }
 
 .msg-decorations > * > img {
@@ -122,6 +177,17 @@ body.admin #messages > .message.hidden {
     min-width: max-content;
 }
 
+.message > .content > .emote {
+    height: 35px;
+    margin-bottom: 3px;
+    vertical-align: bottom;
+}
+
+.message.long > .content > .emote {
+    height: 23px;
+    margin-bottom: 2px;
+}
+
 .msg-decorations > #reactions {
     width: 50px;
     color: #ffffff;
@@ -130,7 +196,17 @@ body.admin #messages > .message.hidden {
     min-width: max-content;
     max-height: 20px;
     border-radius: 8px;
-    transform: translate(-50px, 44px);
+    transform: translate(-50px, 45px);
+}
+
+.msg-decorations > #reactions > .emote {
+    vertical-align: text-bottom;
+    margin-bottom: 1px;
+    height: 15px;
+    max-height: 15px;
+    width: unset;
+    margin-left: 3px;
+    margin-right: 3px;
 }
 
 /* SERVICE SPECIFIC */
@@ -159,6 +235,9 @@ body.admin .admin-btns {
     grid-template-columns: 30px 30px;
     column-gap: 5px;
     row-gap: 5px;
+
+    width: 0px;
+    transform: translate(-65px, 0px);
 }
 
 body.admin .admin-btns > button {

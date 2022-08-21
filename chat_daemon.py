@@ -40,20 +40,23 @@ discordThread = None
 
 messageLog = {}
 messageLogOrdered = []
+
 pinnedIds = defaultdict(lambda: False)
 hiddenIds = defaultdict(lambda: False)
+bannedUserIds = defaultdict(lambda: False)
+bannedMsgIds = defaultdict(lambda: False)
+
 twitchProfileCache = {}
 
 discordToWebIdMap = {}
 
-twitchEmoteTemplate = Template('<img src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
-discordEmoteTemplate = Template('<img class=\'${class}\' src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
-youtubeEmoteTemplate = Template('<img alt= \'${alt}\' src=\'${src}\'/>')
+twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
+discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
+youtubeEmoteTemplate = Template('<img class="emote" alt= \'${alt}\' src=\'${src}\'/>')
 
 # TWITCH
 def twitchCallback(data):
     global websocketServer
-    print(data)
 
     if data['display_name'] not in twitchProfileCache.keys():
         for user in twitchDataAPI.users([data['display_name']]):
@@ -65,23 +68,29 @@ def twitchCallback(data):
 
     data['avatarURL'] = twitchProfileCache[data['display_name']]
     (messageId, messageDict) = twitchMsgToJSON(data, messageWithEmote)
-    websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
-    discordSendMsg(':purple_square: **'+data['display_name']+"**", messageId, data['message'])
+    
+    if bannedUserIds[messageDict['userId']]:
+        print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+    else:
+        websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+        discordSendMsg(':purple_square: **'+data['display_name']+"**", messageId, messageDict['messageText'])
 
 twitchIdParser = re.compile(r';id=([^;]+)')
 def twitchMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
     messageDict = {   
         'id': id,
-        'userName': msg['display_name'],
+        'username': msg['display_name'],
+        'userId': msg['user_id'],
         'time': msg['event_time'],
         'messageText': msg['message'],
         'messageHTML': msgHTML,
-        'service': 'Twitch',
+        'service': 'twitch',
         'serviceURL': 'img/twitch_badge_1024.png',
         'eventType': 'ChatMessage',
         'avatarURL': msg['avatarURL'],
-        'reactions': []
+        'reactions': [],
+        'images': []
     }
     messageLog[id] = messageDict
     messageLogOrdered.append(messageDict)
@@ -100,8 +109,6 @@ def twitchEmoteSubs(messageText, substitutionText):
                 end = int(end)
                 edits.append((end, {'id': id, 'start': start, 'end': end}))
         edits.sort(key=lambda x: x[0], reverse=True)
-
-        print(edits)
 
         for edit in edits:
             msg = twitchEmoteTemplate.safe_substitute({
@@ -131,22 +138,29 @@ def youtubeCallback(message):
 
     messageHTML = youtubeEmoteSubs(message['htmlText'])
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
-    websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
-    discordSendMsg(':red_square: **'+message['authorDetails']['displayName']+'**', messageId, message['snippet']['textMessageDetails']['messageText'])
+
+    if bannedUserIds[messageDict['userId']]:
+        print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+    else:
+        websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+        discordSendMsg(':red_square: **'+message['authorDetails']['displayName']+'**', messageId, messageDict['messageText'])
 
 def youtubeMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
+
     messageDict = {
       'id': id,
-      'userName': msg['authorDetails']['displayName'],
+      'username': msg['authorDetails']['displayName'],
+      'userId': msg['authorDetails']['channelId'],
       'time': msg['snippet']['publishedAt'],
       'messageText': msg['snippet']['textMessageDetails']['messageText'],
       'messageHTML': msgHTML,
-      'service': 'YouTube',
+      'service': 'youtube',
       'serviceURL': 'img/youtube_badge_1024.png',
       'eventType': msg['kind'],
       'avatarURL': msg['authorDetails']['profileImageUrl'],
-      'reactions': []
+      'reactions': [],
+      'images': []
     }
     messageLog[id] = messageDict
     messageLogOrdered.append(messageDict)
@@ -220,14 +234,28 @@ async def on_message(message):
         messageHTML = discordEmoteSubs(message.clean_content)
         
         images = [image.url for image in message.attachments + message.stickers]
+        embeds = []
+        
         for embed in message.embeds:
             images.append(get_gif_url(embed.url))
+            # images.append((get_gif_url(embed.url, embed.image.)))
+            embeds.append(embed.url)
 
         (id, messageDict) = discordMsgToJSON(message, messageHTML, images)
         discordToWebIdMap[message.id] = id
-        websocketServer.send_message_to_all('MSG|'+json.dumps(messageDict))
-        if len(images) > 0:
-            websocketServer.send_message_to_all('HIDE|'+id)
+        
+        # strip embeds from message
+        print('MESSAGE: %s', messageDict)
+        print('EMBEDS:  %s', embeds)
+
+        for embed in embeds:
+            messageDict['messageText'] = messageDict['messageText'].replace(embed, '')
+            messageDict['messageHTML'] = messageDict['messageHTML'].replace(embed, '')
+
+        if bannedUserIds[messageDict['userId']]:
+            print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+        else:
+            websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
 
 def get_gif_url(view_url):
     # Get the page content
@@ -249,15 +277,15 @@ async def on_raw_reaction_add(reaction):
         if messageId in discordToWebIdMap.keys():
             messageId = discordToWebIdMap[messageId]
 
-        websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[messageId]))
-        websocketServer.send_message_to_all('UNHIDE|'+messageId)
+        websocketServer.send_message_to_all(buildMsg('SHOW', ids=[messageId], message=messageLog[messageId]))
+
         if reaction.emoji.id:
             reactionImage = discordEmoteTemplate.safe_substitute({'id': reaction.emoji.id, 'class': 'customReaction'})
-            reactionInnerHTML = reactionImage
+            reactionHTML = reactionImage
         else:
-            reactionInnerHTML = reaction.emoji.name
-        websocketServer.send_message_to_all('REACTION|'+reactionInnerHTML+"@"+str(messageId))
-        messageLog[messageId]['reactions'].append(reactionInnerHTML)
+            reactionHTML = reaction.emoji.name
+        websocketServer.send_message_to_all(buildMsg('REACT', ids=[messageId], message=messageLog[messageId], reactionHTML=reactionHTML))
+        messageLog[messageId]['reactions'].append(reactionHTML)
 
 async def waitAndSendDiscordMessage(message, webMsgId):
     global discordThread
@@ -272,11 +300,12 @@ def discordMsgToJSON(msg, msgHTML, images=None):
     id = uuid.uuid4().hex
     messageDict = {
       'id': id,
-      'userName': msg.author.name,
+      'username': msg.author.name,
+      'userId': msg.author.id, 
       'time': msg.id,
       'messageText': msg.content,
       'messageHTML': msgHTML,
-      'service': 'Discord',
+      'service': 'discord',
       'serviceURL': 'img/discord_badge_1024.png',
       'eventType': msg.type,
       'avatarURL': './img/blank_profile_pic.png' if  msg.author.avatar is None else msg.author.avatar.url,
@@ -298,85 +327,89 @@ def clientJoin(client, server):
 def clientDisconnect(client, server):
 	print("Client(%d) disconnected" % client['id'])
 
-def clientMessage(client, server, message):
-    action = message.split('|')[0]
-    param = message.split('|')[1]
+def buildMsg(action, id=None, ids=None, message=None, messages=None, username=None, reactionHTML=None):   
+    return json.dumps({
+        'action': action,
+        'payload': {
+            'id': str(message['id']) if message else id,
+            'ids': ids,
+            'username': str(message['username']) if message else username,
+            'message': message,
+            'messages': messages,
+            'reactionHMTL': reactionHTML
+        }
+    })
 
-    print(message)
+def clientMessage(client, server, msgStr):
+    message = json.loads(msgStr)
+    
+    action = message['action']
+    payload = message['payload']
+
     match action:
-        case 'DUMMY':
-            print('Sending Dummy Message to Clients')
-            if param in dummyMessages.keys():
-                websocketServer.send_message_to_all('DUMMY|'+dummyMessages[param])
-            else:
-                print(param+' not yet implemented.')
+        case 'HIDE':
+            print('Hiding Message: %s' % payload)
+            hiddenIds[payload['id']] = True
+            websocketServer.send_message_to_all(buildMsg('HIDE', id=payload['id'], message=messageLog[payload['id']]))
+            return
+        case 'SHOW':
+            print('Showing Message: %s' % payload)
+
+            hiddenIds[payload['id']] = False
+            websocketServer.send_message_to_all(buildMsg('NEW', id=payload['id'], message=messageLog[payload['id']]))
+            websocketServer.send_message_to_all(buildMsg('SHOW', id=payload['id'], message=messageLog[payload['id']]))
+            if pinnedIds[payload['id']]:
+                websocketServer.send_message_to_all(buildMsg('PIN', id=payload['id'], message=messageLog[payload['id']]))
             return
         case 'PIN':
-            print('Pin Message: '+param)
-            pinnedIds[param] = True
-            hiddenIds[param] = False
-            websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[param]))
-            websocketServer.send_message_to_all('UNHIDE|'+param)
-            websocketServer.send_message_to_all('PIN|'+param)
+            print('Pin Message: %s' % payload)
+            pinnedIds[payload['id']] = True
+            hiddenIds[payload['id']] = False
+            websocketServer.send_message_to_all(buildMsg('NEW', id=payload['id'], message=messageLog[payload['id']]))
+            websocketServer.send_message_to_all(buildMsg('SHOW', id=payload['id'], message=messageLog[payload['id']]))
+            websocketServer.send_message_to_all(buildMsg('PIN', id=payload['id'], message=messageLog[payload['id']]))
+            pinnedIds
             return
         case 'UNPIN':
-            print('Unpin Message: '+param)
-            pinnedIds[param] = False
-            websocketServer.send_message_to_all('UNPIN|'+param)
+            print('Unpin Message: %s' % payload)
+            pinnedIds[payload['id']] = False
+            websocketServer.send_message_to_all(buildMsg('UNPIN', id=payload['id'], message=messageLog[payload['id']]))
             return
-        case 'HIDE':
-            print('Hiding Message: '+param)
-            hiddenIds[param] = True
-            websocketServer.send_message_to_all('HIDE|'+param)
+        case 'BAN':
+            print('Ban Message: %s' % payload)
+            userIdToBan = messageLog[payload['id']]['userId']
+            bannedUserIds[userIdToBan] = True
+
+            for messageToBan in [m for m in messageLogOrdered if m['userId'] == userIdToBan]:
+                websocketServer.send_message_to_all(buildMsg('BAN', id=messageToBan['id']))
+
             return
-        case 'UNHIDE':
-            print('Showing Message: '+param)
-            hiddenIds[param] = False
-            websocketServer.send_message_to_all('MSG|'+json.dumps(messageLog[param]))
-            websocketServer.send_message_to_all('UNHIDE|'+param)
-            if pinnedIds[param]:
-                websocketServer.send_message_to_all('PIN|'+param)
+        case 'UNBAN':
+            print('Unban Message: %s' % payload)
+            userIdToUnban = messageLog[payload['id']]['userId']
+            bannedUserIds[userIdToUnban] = False
+
+            for messageToUnban in [m for m in messageLogOrdered if m['userId'] == userIdToUnban]:
+                websocketServer.send_message_to_all(buildMsg('UNBAN', id=messageToUnban['id']))
+
             return
         case 'CLEAR':
-            print('Clearing all clients.')
-            websocketServer.send_message_to_all('CLEAR|')
-            return
-        case 'RELOAD_CLIENTS':
-            print('Clearing all clients.')
-            websocketServer.send_message_to_all('CLEAR|')
-
-            print('Reloading '+param+' messages on ALL clients.')
-            messagesStr = processMessage(param)
-            websocketServer.send_message_to_all('RELOAD|'+messagesStr)
-
-            print('Repinning all pinned messages on all clients.')
-            for messageid in pinnedIds.keys():
-                if pinnedIds[messageid]:
-                    print('Pinning message: '+messageid)
-                    websocketServer.send_message_to_all('PIN|'+messageid)
-
-            print('Hiding all hidden messages on all clients.')
-            for messageid in hiddenIds.keys():
-                if hiddenIds[messageid]:
-                    print('Hiding message: '+messageid)
-                    websocketServer.send_message_to_all('HIDE|'+messageid)
+            print('Clearing Clients')
+            websocketServer.send_message_to_all(buildMsg('CLEAR'))
             return
         case 'RELOAD':
-            print('Reloading '+param+' messages')
-            messagesStr = processMessage(param)
-            websocketServer.send_message(client, 'RELOAD|'+messagesStr)
-
-            print('Repinning all pinned messages on all clients.')
-            for messageid in pinnedIds.keys():
-                if pinnedIds[messageid]:
-                    print('Pinning message: '+messageid)
-                    websocketServer.send_message(client, 'PIN|'+messageid)
-
-            print('Hiding all hidden messages on all clients.')
-            for messageid in hiddenIds.keys():
-                if hiddenIds[messageid]:
-                    print('Hiding message: '+messageid)
-                    websocketServer.send_message(client, 'HIDE|'+messageid)
+            print('Reloading Clients')
+            if payload['args']:
+                numMessages = payload['args'][0]
+            else:
+                numMessages = 0
+            
+            websocketServer.send_message_to_all(buildMsg('RELOAD', messages=messageLogOrdered[-numMessages:]))
+            for message in messageLogOrdered[-numMessages:]:
+                if pinnedIds[message['id']]:
+                    websocketServer.send_message_to_all(buildMsg('PIN', id=message['id'], message=messageLog[message['id']]))
+                if hiddenIds[message['id']]:
+                    websocketServer.send_message_to_all(buildMsg('HIDE', id=message['id'], message=messageLog[message['id']]))
             return
         case _:
             print("Unrecognized command from client: "+action)
