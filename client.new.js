@@ -255,7 +255,7 @@ function constructMessage(msgId, messageText, messageHTML, username, service, pr
 
     instance.querySelector('#user-pic > img').src = profilePicURL;
     instance.querySelector('#user-service > img').src = SERVICES[service];
-    instance.querySelector('#user-name').innerHTML = username.toUpperCase();
+    instance.querySelector('#user-name').innerHTML = username;
     instance.querySelector('#reactions').innerHTML = Array.from(reactions).join('');
     
     instance.querySelector('.content').innerHTML = messageHTML;

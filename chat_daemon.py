@@ -28,8 +28,9 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
-disableDiscordThread = True
+testMode = False
 testThread = 998310893387534367
+currentDiscordThread = None
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -52,7 +53,7 @@ discordToWebIdMap = {}
 
 twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
-youtubeEmoteTemplate = Template('<img class="emote" alt= \'${alt}\' src=\'${src}\'/>')
+youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
 # TWITCH
 def twitchCallback(data):
@@ -194,7 +195,7 @@ async def on_ready():
     print('[DISCORD] We have logged in as {0.user}'.format(discordClient))
     
     global discordThread
-    if disableDiscordThread:
+    if testMode:
         discordChannel = discordClient.get_channel(testThread) #Test Channel
         discordThread = discordClient.get_channel(testThread) #Test Channel
     else:
@@ -221,9 +222,15 @@ async def on_ready():
             links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
             message = await discordChannel.send(content=links, file=picture)
 
-        discordThread = await discordChannel.create_thread(name=videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']',
-                                                        message=message,
-                                                        auto_archive_duration=1440)
+        if currentDiscordThread is None:
+            print('Creating new discord thread...')
+            discordThread = await discordChannel.create_thread(name=videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']',
+                                                            message=message,
+                                                            auto_archive_duration=1440)
+        else:
+            print('Connection reset, reusing existing discordThread [%s].' % currentDiscordThread)
+            discordThread = discordClient.get_channel(currentDiscordThread)
+
         print('1 Thread: '+str(discordThread))
 
 @discordClient.event
@@ -244,10 +251,10 @@ async def on_message(message):
         (id, messageDict) = discordMsgToJSON(message, messageHTML, images)
         discordToWebIdMap[message.id] = id
         
-        # strip embeds from message
-        print('MESSAGE: %s', messageDict)
-        print('EMBEDS:  %s', embeds)
+        # print('MESSAGE: %s', messageDict)
+        # print('EMBEDS:  %s', embeds)
 
+        # strip embeds from message
         for embed in embeds:
             messageDict['messageText'] = messageDict['messageText'].replace(embed, '')
             messageDict['messageHTML'] = messageDict['messageHTML'].replace(embed, '')
