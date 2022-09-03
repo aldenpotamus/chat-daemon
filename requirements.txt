@@ -4,7 +4,7 @@
 Pillow == 9.1.0
 
 # C:\src\chat_daemon\chat_daemon.py: 5
-py_cord == 2.0.0b7
+py_cord == 2.1.1
 
 # C:\src\chat_daemon\chat_daemon.py: 13,14
 # pip install git+https://github.com/KaitoCross/pytchat.git

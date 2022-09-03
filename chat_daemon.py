@@ -1,6 +1,5 @@
 import asyncio
 import configparser
-from email.errors import MessageError
 import http.server
 import json
 import logging
@@ -28,16 +27,12 @@ from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
 
-testMode = False
-testThread = 998310893387534367
-currentDiscordThread = None
+discordThread = None
+currentDiscordThreadId = None
+youtubeVideoId = None
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
-
-global youtubeVideoId, discordThread
-youtubeVideoId = None
-discordThread = None
 
 messageLog = {}
 messageLogOrdered = []
@@ -125,8 +120,9 @@ youtubeAPI = None
 def youtubeStart():
     global CONFIG, youtubeVideoId
     bcastService = AuthManager.get_authenticated_service("broadcast",
-                                                         clientSecretFile='client_secret.json',
-                                                         scopes=["https://www.googleapis.com/auth/youtube.force-ssl"])
+                                                         clientSecretFile='livechatbot_client_secret.json',
+                                                         scopes=["https://www.googleapis.com/auth/youtube.force-ssl"],
+                                                         config=CONFIG)
 
     youtubeAPI = YoutubeLivechat(youtubeVideoId,
                                  ytBcastService=bcastService,
@@ -191,20 +187,25 @@ def discordClientThreadTarget():
 
 @discordClient.event
 async def on_ready():
-    global CONFIG
+    global CONFIG, discordThread, currentDiscordThreadId
     print('[DISCORD] We have logged in as {0.user}'.format(discordClient))
     
-    global discordThread
-    if testMode:
-        discordChannel = discordClient.get_channel(testThread) #Test Channel
-        discordThread = discordClient.get_channel(testThread) #Test Channel
+    if CONFIG['DEV']['testMode']:
+        currentDiscordThreadId = int(CONFIG['DEV']['testChannelId'])
+        discordChannel = discordClient.get_channel(int(CONFIG['DEV']['testChannelId'])) #Test Channel
+        discordThread = discordClient.get_channel(int(CONFIG['DEV']['testChannelId'])) #Test Channel
+        
+        print(f'Running client in TEST mode discord thread {currentDiscordThreadId}...')
+        print(f'Discord Channel: {discordChannel}')
+        print(f'Discord Thread: {discordThread}')
     else:
-        discordChannel = discordClient.get_channel(965324208362111076)
+        discordChannel = discordClient.get_channel(CONFIG['CLIENT']['discordChannelId'])
 
         global youtubeVideoId
         videoDataService = AuthManager.get_authenticated_service("videolist",
-                                                                clientSecretFile='client_secret.json',
-                                                                scopes=["https://www.googleapis.com/auth/youtube.readonly"])
+                                                                 clientSecretFile='livechatbot_client_secret.json',
+                                                                 scopes=["https://www.googleapis.com/auth/youtube.readonly"],
+                                                                 config=CONFIG)
         videoDataRequest = videoDataService.videos().list(
             part="snippet,contentDetails,statistics",
             id=youtubeVideoId)
@@ -222,14 +223,15 @@ async def on_ready():
             links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
             message = await discordChannel.send(content=links, file=picture)
 
-        if currentDiscordThread is None:
+        if currentDiscordThreadId is None:
             print('Creating new discord thread...')
             discordThread = await discordChannel.create_thread(name=videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']',
                                                             message=message,
                                                             auto_archive_duration=1440)
+            currentDiscordThread = discordThread.id
         else:
-            print('Connection reset, reusing existing discordThread [%s].' % currentDiscordThread)
-            discordThread = discordClient.get_channel(currentDiscordThread)
+            print('Connection reset, reusing existing discordThread [%s].' % currentDiscordThreadId)
+            discordThread = discordClient.get_channel(currentDiscordThreadId)
 
         print('1 Thread: '+str(discordThread))
 
@@ -483,15 +485,6 @@ if __name__ == '__main__':
     print('Parsing config file...')
     CONFIG = configparser.ConfigParser()
     CONFIG.read('config.ini')
-
-    global dummyMessages
-    if(exists(CONFIG['GENERAL']['dummyMessageFile'])):
-        print('Loading dummy messages...')
-        with open('dummy_messages.json', 'r') as file:
-            dummyMessages = json.load(file)
-    else:
-        print('No dummy file found, use dummyMessageBuilder.py to create one, if needed.')
-        dummyMessages = {}
 
     print('Running chatDaemon...')
     print('Args: '+str(sys.argv))
