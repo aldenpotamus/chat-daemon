@@ -120,7 +120,7 @@ youtubeAPI = None
 def youtubeStart():
     global CONFIG, youtubeVideoId
     bcastService = AuthManager.get_authenticated_service("broadcast",
-                                                         clientSecretFile='livechatbot_client_secret.json',
+                                                         clientSecretFile=CONFIG['AUTHENTICATION']['youtubeClientSecret'],
                                                          scopes=["https://www.googleapis.com/auth/youtube.force-ssl"],
                                                          config=CONFIG)
 
@@ -203,7 +203,7 @@ async def on_ready():
 
         global youtubeVideoId
         videoDataService = AuthManager.get_authenticated_service("videolist",
-                                                                 clientSecretFile='livechatbot_client_secret.json',
+                                                                 clientSecretFile=CONFIG['AUTHENTICATION']['youtubeClientSecret'],
                                                                  scopes=["https://www.googleapis.com/auth/youtube.readonly"],
                                                                  config=CONFIG)
         videoDataRequest = videoDataService.videos().list(
