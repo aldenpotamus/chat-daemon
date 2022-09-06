@@ -190,7 +190,7 @@ async def on_ready():
     global CONFIG, discordThread, currentDiscordThreadId
     print('[DISCORD] We have logged in as {0.user}'.format(discordClient))
     
-    if CONFIG['DEV']['testMode']:
+    if CONFIG.getboolean('DEV', 'testMode'):
         currentDiscordThreadId = int(CONFIG['DEV']['testChannelId'])
         discordChannel = discordClient.get_channel(int(CONFIG['DEV']['testChannelId'])) #Test Channel
         discordThread = discordClient.get_channel(int(CONFIG['DEV']['testChannelId'])) #Test Channel
@@ -199,7 +199,7 @@ async def on_ready():
         print(f'Discord Channel: {discordChannel}')
         print(f'Discord Thread: {discordThread}')
     else:
-        discordChannel = discordClient.get_channel(CONFIG['CLIENT']['discordChannelId'])
+        discordChannel = discordClient.get_channel(int(CONFIG['CLIENT']['discordChannelId']))
 
         global youtubeVideoId
         videoDataService = AuthManager.get_authenticated_service("videolist",
