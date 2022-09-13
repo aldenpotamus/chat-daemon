@@ -247,7 +247,6 @@ async def on_message(message):
         
         for embed in message.embeds:
             images.append(get_gif_url(embed.url))
-            # images.append((get_gif_url(embed.url, embed.image.)))
             embeds.append(embed.url)
 
         (id, messageDict) = discordMsgToJSON(message, messageHTML, images)
@@ -286,7 +285,8 @@ async def on_raw_reaction_add(reaction):
         if messageId in discordToWebIdMap.keys():
             messageId = discordToWebIdMap[messageId]
 
-        websocketServer.send_message_to_all(buildMsg('SHOW', ids=[messageId], message=messageLog[messageId]))
+        if len(messageLog[messageId]['images']) == 0:
+            websocketServer.send_message_to_all(buildMsg('SHOW', ids=[messageId], message=messageLog[messageId]))
 
         if reaction.emoji.id:
             reactionImage = discordEmoteTemplate.safe_substitute({'id': reaction.emoji.id, 'class': 'customReaction'})
