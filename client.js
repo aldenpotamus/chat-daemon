@@ -243,12 +243,19 @@ function constructMessage(msgId, messageText, messageHTML, username, service, pr
         instance.querySelector('.message').classList.add('hidden');
         instance.querySelector('.message').classList.add('img');
         
-        var imageElement = new Image();
-        imageElement.src = imageURL;
-        imageElement.referrerpolicy = 'no-referrer'
-        imageElement.classList.add('discordImg');
-
-        instance.querySelector('.message').insertBefore(imageElement, instance.querySelector('.message > .content'));
+        if(imageURL.includes('.mp4') || imageURL.includes('.ogg') || imageURL.includes('.webm')) {
+            var element =  document.createElement('video');
+            element.loop = true;
+            element.autoplay = "autoplay";
+            element.muted = true;
+        } else {
+            var element = new Image();
+        }
+        element.src = imageURL;
+        element.referrerpolicy = 'no-referrer';
+        element.classList.add('discordImg');
+        
+        instance.querySelector('.message').insertBefore(element, instance.querySelector('.message > .content'));
     } else {
         instance.querySelector('.message').classList.add('text');
     }
@@ -268,7 +275,13 @@ function constructMessage(msgId, messageText, messageHTML, username, service, pr
         newMsg.style.transform = 'translateX(-3000%)';
 
         if(newMsg.querySelector('.discordImg')) {
+            // For normal Images
             newMsg.querySelector('.discordImg').addEventListener('load', function(event) {
+                animate(newMsg);
+                selfDestruct(document.getElementById('messages'), newMsg); 
+            });
+            // For HTML Video
+            newMsg.querySelector('.discordImg').addEventListener('loadeddata', function(event) {
                 animate(newMsg);
                 selfDestruct(document.getElementById('messages'), newMsg); 
             });

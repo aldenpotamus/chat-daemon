@@ -245,15 +245,29 @@ async def on_message(message):
         images = [image.url for image in message.attachments + message.stickers]
         embeds = []
         
+        print(f'EMBEDS: {message.embeds}')
         for embed in message.embeds:
-            images.append(get_gif_url(embed.url))
-            embeds.append(embed.url)
+            print(f'Embed is of type "{embed.type}":')
+            if embed.type == 'gifv':
+                print(f'EMBED IMAGE PROXY URL: {embed.image.proxy_url}')
+                print(f'EMBED VIDEO PROXY URL: {embed.video.proxy_url}')
+                images.append(embed.video.proxy_url)
+                embeds.append(embed.url)
+            elif embed.type == 'rich':
+                print('EMBED ERROR: No support for rich yet...')
+            elif embed.type ==  'image':
+                print('EMBED ERROR: No support for image yet...')
+            elif embed.type == 'video':
+                print('EMBED ERROR: No support for video yet...')
+            elif embed.type == 'article':
+                print('EMBED ERROR: No support for article yet...')
+            elif embed.type == 'link':
+                print('EMBED ERROR: No support for link yet...')
+            else:
+                print('Embed type unrecognized skipping embed...')
 
         (id, messageDict) = discordMsgToJSON(message, messageHTML, images)
         discordToWebIdMap[message.id] = id
-        
-        # print('MESSAGE: %s', messageDict)
-        # print('EMBEDS:  %s', embeds)
 
         # strip embeds from message
         for embed in embeds:
@@ -264,16 +278,6 @@ async def on_message(message):
             print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
         else:
             websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
-
-def get_gif_url(view_url):
-    # Get the page content
-    page_content = requests.get(view_url).text
-
-    # Regex to find the URL on the c.tenor.com domain that ends with .gif
-    regex = r"(?i)\b((https?://c[.]tenor[.]com/)(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))[.]gif)"
-
-    # Find and return the first match
-    return re.findall(regex, page_content)[0][0]
 
 @discordClient.event
 async def on_raw_reaction_add(reaction):

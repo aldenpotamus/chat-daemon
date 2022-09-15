@@ -94,7 +94,7 @@ body.non-admin #messages > .message.shiftleft {
     text-shadow: 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000;
 }
 
-#messages > .img > img {
+#messages > .img > img,video {
     max-height: 500px;
     max-width: 500px;
     padding-left: 75px;
