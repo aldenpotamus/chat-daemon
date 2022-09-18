@@ -119,7 +119,7 @@ youtubeAPI = None
 
 def youtubeStart():
     global CONFIG, youtubeVideoId
-    bcastService = AuthManager.get_authenticated_service("broadcast",
+    bcastService = AuthManager.get_authenticated_service("chat",
                                                          clientSecretFile=CONFIG['AUTHENTICATION']['youtubeClientSecret'],
                                                          scopes=["https://www.googleapis.com/auth/youtube.force-ssl"],
                                                          config=CONFIG)
@@ -235,11 +235,20 @@ async def on_ready():
 
         print('1 Thread: '+str(discordThread))
 
+messageQueue = {}
+
 @discordClient.event
 async def on_message(message):
-    global discordThread
+    global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))
+        
+        # Await embed changes...
+        messageQueue[message.id] = message
+        await asyncio.sleep(.33)
+        message = messageQueue[message.id]
+        del messageQueue[message.id]
+
         messageHTML = discordEmoteSubs(message.clean_content)
         
         images = [image.url for image in message.attachments + message.stickers]
@@ -278,6 +287,13 @@ async def on_message(message):
             print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
         else:
             websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+
+@discordClient.event
+async def on_message_edit(before, after):
+    global messageQueue
+    print('EMBED UPDATE')
+    if before.id in messageQueue:
+        messageQueue[before.id] = after
 
 @discordClient.event
 async def on_raw_reaction_add(reaction):
