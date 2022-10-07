@@ -119,10 +119,8 @@ youtubeAPI = None
 
 def youtubeStart():
     global CONFIG, youtubeVideoId
-    bcastService = AuthManager.get_authenticated_service("chat",
-                                                         clientSecretFile=CONFIG['AUTHENTICATION']['youtubeClientSecret'],
-                                                         scopes=["https://www.googleapis.com/auth/youtube.force-ssl"],
-                                                         config=CONFIG)
+    bcastService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-RECV'], 
+                                                         authConfig=CONFIG['AUTH_MANAGER'])
 
     youtubeAPI = YoutubeLivechat(youtubeVideoId,
                                  ytBcastService=bcastService,
@@ -202,10 +200,8 @@ async def on_ready():
         discordChannel = discordClient.get_channel(int(CONFIG['CLIENT']['discordChannelId']))
 
         global youtubeVideoId
-        videoDataService = AuthManager.get_authenticated_service("videolist",
-                                                                 clientSecretFile=CONFIG['AUTHENTICATION']['youtubeClientSecret'],
-                                                                 scopes=["https://www.googleapis.com/auth/youtube.readonly"],
-                                                                 config=CONFIG)
+        videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
+                                                                 authConfig=CONFIG['AUTH_MANAGER'])
         videoDataRequest = videoDataService.videos().list(
             part="snippet,contentDetails,statistics",
             id=youtubeVideoId)
