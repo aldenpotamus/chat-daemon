@@ -11,6 +11,8 @@ from collections import defaultdict
 from io import BytesIO
 from os.path import exists
 from string import Template
+import time
+import pygsheets
 
 import discord
 
@@ -52,15 +54,61 @@ twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvn
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
+# ChatBot Commands
+async def checkForCommandAsync(messageText):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, checkForCommand, messageText)
+
+def checkForCommand(messageText):
+    if messageText.startswith('!'):
+        return True
+    return False
+
+async def getResponseAsync(messageText):
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, getResponse, messageText)
+
+commands = None
+commandRefreshTime = -10000
+def getResponse(messageText):
+    global commandRefreshTime, commands
+    if not commands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshInterval'):
+        print('Pulling commands from sheet again...')
+        commandRefreshTime = time.time()
+
+        commandsWorksheet = sheet.worksheet_by_title(CONFIG['SHEET']['commandsSheetName'])
+        commandsList = commandsWorksheet.get_values(start='A2', end='B1000', include_tailing_empty=False, returnas='matrix')
+        print(commandsList)
+        commands = {c[0]: c[1] for c in commandsList}
+
+    if messageText in commands:
+        return commands[messageText]
+
+    return None
+
 # TWITCH  
-class TwitchClient(twitchio.Client):
+class TwitchClient(twitchio.Client):  
+    RESPONSE_CHANNEL = None
+    
     def __init__(self, token, client_secret, initial_channels):
         super().__init__(token=token, client_secret=client_secret, initial_channels=initial_channels)
     
     async def event_ready(self):
         print('Twitch Ready!')
+        self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
     
     async def event_message(self, message):
+        if await checkForCommandAsync(message.content):
+            messageToSend = await getResponseAsync(message.content)
+            if messageToSend:
+                print('Sending message to Twitch...')
+                await self.RESPONSE_CHANNEL.send(messageToSend)
+            return
+
+        if not message.author:
+            print('Message is from a bot, ignoring...')
+            return
+
         if message.author.name not in twitchProfileCache.keys():
             user = None
             for user in await self.fetch_users(names=[message.author.name]):
@@ -83,8 +131,8 @@ def twitchServerThreadTarget():
     asyncio.set_event_loop(loop)
 
     global twitchClient
-    twitchClient = TwitchClient(token=CONFIG['AUTHENTICATION']['twitchToken'],
-                                client_secret=CONFIG['AUTHENTICATION']['twitchClientSecret'],
+    twitchClient = TwitchClient(token=CONFIG['TWITCH_BOT']['accessToken'],
+                                client_secret=CONFIG['TWITCH_BOT']['clientSecret'],
                                 initial_channels=[CONFIG['AUTHENTICATION']['twitchChannelName']])
     twitchClient.run()
 
@@ -135,9 +183,19 @@ def twitchEmoteSubs(messageText, substitutionText):
 youtubeAPI = None
 
 def youtubeStart():
-    global CONFIG, youtubeVideoId
+    global CONFIG, youtubeVideoId, chatbotService, liveChatId
     bcastService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-RECV'], 
                                                          authConfig=CONFIG['AUTH_MANAGER'])
+
+    chatbotService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-SEND'], 
+                                                           authConfig=CONFIG['AUTH_MANAGER'])
+
+    request = bcastService.liveBroadcasts().list(
+        part='snippet',
+        id=youtubeVideoId
+    )
+    response = request.execute()
+    liveChatId = response['items'][0]['snippet']['liveChatId']
 
     youtubeAPI = YoutubeLivechat(youtubeVideoId,
                                  ytBcastService=bcastService,
@@ -146,8 +204,14 @@ def youtubeStart():
     youtubeAPI.start()
 
 def youtubeCallback(message):
+    if checkForCommand(message['snippet']['textMessageDetails']['messageText']):
+        messageToSend = getResponse(message['snippet']['textMessageDetails']['messageText'])
+        if messageToSend:
+                print('Sending message to YouTube...')
+                youtubeSendMessage(messageToSend)
+        return
+    
     global websocketServer
-
     messageHTML = youtubeEmoteSubs(message['htmlText'])
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
 
@@ -156,6 +220,22 @@ def youtubeCallback(message):
     else:
         websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
         discordSendMsg(':red_square: **'+message['authorDetails']['displayName']+'**', messageId, messageDict['messageText'])
+
+def youtubeSendMessage(messageText):
+    request = chatbotService.liveChatMessages().insert(
+        part="snippet",
+        body={
+          "snippet": {
+            "liveChatId": liveChatId,
+            "type": "textMessageEvent",
+            "textMessageDetails": {
+              "messageText": messageText
+            }
+          }
+        }
+    )
+
+    return request.execute()
 
 def youtubeMsgToJSON(msg, msgHTML):
     id = uuid.uuid4().hex
@@ -252,6 +332,13 @@ messageQueue = {}
 
 @discordClient.event
 async def on_message(message):
+    if await checkForCommandAsync(message.clean_content):
+        messageToSend = await getResponseAsync(message.clean_content)
+        if messageToSend:
+                print('Sending message to Discord...')
+                await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
+        return
+    
     global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))
@@ -510,6 +597,10 @@ if __name__ == '__main__':
     print('Parsing config file...')
     CONFIG = configparser.ConfigParser()
     CONFIG.read('config.ini')
+
+    print('Getting google sheet with commands data...')
+    gc = pygsheets.authorize(service_file=CONFIG['SHEET']['serviceToken'])
+    sheet = gc.open_by_key(CONFIG['SHEET']['id'])
 
     print('Running chatDaemon...')
     print('Args: '+str(sys.argv))
