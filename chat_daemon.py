@@ -19,10 +19,12 @@ from yt_livechat.youtube_livechat import YoutubeLivechat
 from auth_manager.auth_manager import AuthManager
 
 import requests
-import twitch
 from PIL import Image
 from pytchat import LiveChatAsync
-from pywitch import PyWitchTMI
+
+import twitchio
+from twitchio.ext import commands
+
 from pyyoutube import Api
 from websocket_server import WebsocketServer
 import re
@@ -50,41 +52,56 @@ twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvn
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
-# TWITCH
-def twitchCallback(data):
-    global websocketServer
-
-    if data['display_name'] not in twitchProfileCache.keys():
-        for user in twitchDataAPI.users([data['display_name']]):
-            print('Got offline profile picture for '+data['display_name'])
-            twitchProfileCache[data['display_name']] = user.profile_image_url
-
-    messageWithEmote = twitchEmoteSubs(data['message'],
-                                       [e for e in data['event_raw'].split(';') if e.startswith('emotes')][0])
-
-    data['avatarURL'] = twitchProfileCache[data['display_name']]
-    (messageId, messageDict) = twitchMsgToJSON(data, messageWithEmote)
+# TWITCH  
+class TwitchClient(twitchio.Client):
+    def __init__(self, token, client_secret, initial_channels):
+        super().__init__(token=token, client_secret=client_secret, initial_channels=initial_channels)
     
-    if bannedUserIds[messageDict['userId']]:
-        print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
-    else:
-        websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
-        discordSendMsg(':purple_square: **'+data['display_name']+"**", messageId, messageDict['messageText'])
+    async def event_ready(self):
+        print('Twitch Ready!')
+    
+    async def event_message(self, message):
+        if message.author.name not in twitchProfileCache.keys():
+            user = None
+            for user in await self.fetch_users(names=[message.author.name]):
+                print('Got offline profile picture for '+message.author.name)
+                twitchProfileCache[message.author.name] = user
+        messageWithEmote = twitchEmoteSubs(message.content,
+                [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
+        
+        (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
+
+        if bannedUserIds[messageDict['userId']]:
+            print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+        else:
+            websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+            discordSendMsg(':purple_square: **'+message.author.name+"**", messageId, messageDict['messageText'])
+
+twitchClient = None
+def twitchServerThreadTarget():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    global twitchClient
+    twitchClient = TwitchClient(token=CONFIG['AUTHENTICATION']['twitchToken'],
+                                client_secret=CONFIG['AUTHENTICATION']['twitchClientSecret'],
+                                initial_channels=[CONFIG['AUTHENTICATION']['twitchChannelName']])
+    twitchClient.run()
 
 twitchIdParser = re.compile(r';id=([^;]+)')
-def twitchMsgToJSON(msg, msgHTML):
+def twitchMsgToJSON(message, user, msgHTML):
     id = uuid.uuid4().hex
     messageDict = {   
         'id': id,
-        'username': msg['display_name'],
-        'userId': msg['user_id'],
-        'time': msg['event_time'],
-        'messageText': msg['message'],
+        'username': user.display_name,
+        'userId': message.author.name,
+        'time': str(message.timestamp),
+        'messageText': message.content,
         'messageHTML': msgHTML,
         'service': 'twitch',
         'serviceURL': 'img/twitch_badge_1024.png',
         'eventType': 'ChatMessage',
-        'avatarURL': msg['avatarURL'],
+        'avatarURL': user.profile_image,
         'reactions': [],
         'images': []
     }
@@ -466,17 +483,9 @@ def main():
     httpServerThread.start()
 
     print("Connecting to Twitch...")
-    twitchChat = PyWitchTMI(
-        channel = CONFIG['AUTHENTICATION']['twitchChannelName'],
-        token = CONFIG['AUTHENTICATION']['twitchToken'],
-        callback = twitchCallback,  # Optional
-        users = {},                 # Optional, but strongly recomended
-        verbose = True,             # Optional
-    )
-    twitchChat.start()
-    global twitchDataAPI
-    twitchDataAPI = twitch.Helix(CONFIG['AUTHENTICATION']['twitchClientID'],
-                                 CONFIG['AUTHENTICATION']['twitchClientSecret'])
+    twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
+                                        daemon=True)
+    twitchClientThread.start()
 
     print("WebSocket Server Starting...")
     global websocketServer
@@ -504,4 +513,5 @@ if __name__ == '__main__':
 
     print('Running chatDaemon...')
     print('Args: '+str(sys.argv))
+
     main()
