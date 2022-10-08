@@ -54,7 +54,7 @@ twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvn
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
-# ChatBot Commands
+# CHATBOT
 async def checkForCommandAsync(messageText):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, checkForCommand, messageText)
@@ -183,7 +183,7 @@ def twitchEmoteSubs(messageText, substitutionText):
 youtubeAPI = None
 
 def youtubeStart():
-    global CONFIG, youtubeVideoId, chatbotService, liveChatId
+    global CONFIG, youtubeVideoId, chatbotService, liveChatId, ytBotChannelId
     bcastService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-RECV'], 
                                                          authConfig=CONFIG['AUTH_MANAGER'])
 
@@ -197,6 +197,13 @@ def youtubeStart():
     response = request.execute()
     liveChatId = response['items'][0]['snippet']['liveChatId']
 
+    request = chatbotService.channels().list(
+        part="snippet",
+        mine=True
+    )
+    response = request.execute()
+    ytBotChannelId = response['items'][0]['id']
+
     youtubeAPI = YoutubeLivechat(youtubeVideoId,
                                  ytBcastService=bcastService,
                                  callbacks=[youtubeCallback])
@@ -204,6 +211,10 @@ def youtubeStart():
     youtubeAPI.start()
 
 def youtubeCallback(message):
+    if message['authorDetails']['channelId'] == ytBotChannelId:
+        print('Ignoring chatbot message...')
+        return
+
     if checkForCommand(message['snippet']['textMessageDetails']['messageText']):
         messageToSend = getResponse(message['snippet']['textMessageDetails']['messageText'])
         if messageToSend:
@@ -339,6 +350,17 @@ async def on_message(message):
                 await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
         return
     
+    if message.type == discord.MessageType.reply:
+        targetMessage = discordClient.get_message(message.reference.message_id)
+        if ':purple_square:' in targetMessage.clean_content:
+            messageToFwd = f'[discord] {message.author.name}: {message.clean_content}'
+            print('Forward message to Twitch: {messageToFwd}')
+            await twitchClient.RESPONSE_CHANNEL.send(messageToFwd)
+        elif ':red_square:' in targetMessage.clean_content:
+            messageToFwd = f'[discord] {message.author.name}: {message.clean_content}'
+            print('Forward message to YouTube: {messageToFwd}')
+            youtubeSendMessage(messageToFwd)
+
     global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))

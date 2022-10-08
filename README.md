@@ -12,6 +12,8 @@ Pull dependant projects with pip:
 pip install -r requirements.txt
 ```
 
+https://twitchtokengenerator.com/
+
 ## Authentication
 Step 1
 ---
