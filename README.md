@@ -12,7 +12,7 @@ Pull dependant projects with pip:
 pip install -r requirements.txt
 ```
 
-https://twitchtokengenerator.com/
+https://twitchapps.com/tmi/
 
 ## Authentication
 Step 1

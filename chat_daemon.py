@@ -68,22 +68,52 @@ async def getResponseAsync(messageText):
     loop = asyncio.get_event_loop()
     return await loop.run_in_executor(None, getResponse, messageText)
 
-commands = None
+botCommands = None
+botCommandHeaders = None
 commandRefreshTime = -10000
+extractMatchGroups = r'([$][{][^ }]+[}])'
 def getResponse(messageText):
-    global commandRefreshTime, commands
-    if not commands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshInterval'):
+    global commandRefreshTime, botCommands, botCommandHeaders
+    if not botCommands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshInterval'):
         print('Pulling commands from sheet again...')
         commandRefreshTime = time.time()
 
         commandsWorksheet = sheet.worksheet_by_title(CONFIG['SHEET']['commandsSheetName'])
-        commandsList = commandsWorksheet.get_values(start='A2', end='B1000', include_tailing_empty=False, returnas='matrix')
-        print(commandsList)
-        commands = {c[0]: c[1] for c in commandsList}
+        botCommandHeaders = commandsWorksheet.get_values(start='A2', end='F2', returnas='matrix')[0]
+        commandsData = commandsWorksheet.get_values(start='A3', end='F1000', include_tailing_empty=False, returnas='matrix')
 
-    if messageText in commands:
-        return commands[messageText]
+        commandsList = []
+        for row in commandsData:
+            if row[0] != '' and row[0] != 'VideoID':
+                commandsList.append({ x.lower(): y for (x,y) in zip(botCommandHeaders, row)})
 
+        botCommands = {c['command']: c for c in commandsList}
+
+    print(botCommands)
+
+    command = messageText.split(' ')[0]
+    if command in botCommands:
+        print(f'Processing command: {command}...')
+        
+        response = botCommands[command]['response']
+        
+        if 'regex' in botCommands[command]:
+            responseTokens = re.findall(extractMatchGroups, botCommands[command]['response'])
+
+            requestTokens = {}
+            for groupIter in re.finditer(botCommands[command]['regex'], messageText):
+                for key in groupIter.groupdict():
+                    requestTokens[f'${{{key}}}'] = groupIter.groupdict()[key]
+            
+            for addTokens in botCommandHeaders[3:]:
+                if addTokens in botCommands[command]:
+                    requestTokens[f'${{{addTokens}}}'] = botCommands[command][addTokens]
+
+            for token in responseTokens:
+                if token in requestTokens:
+                    response = response.replace(token, requestTokens[token])
+
+        return response
     return None
 
 # TWITCH  
