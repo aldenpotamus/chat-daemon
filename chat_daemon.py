@@ -55,18 +55,10 @@ discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
 # CHATBOT
-async def checkForCommandAsync(messageText):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, checkForCommand, messageText)
-
 def checkForCommand(messageText):
     if messageText.startswith('!'):
         return True
     return False
-
-async def getResponseAsync(messageText):
-    loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, getResponse, messageText)
 
 botCommands = None
 botCommandHeaders = None
@@ -74,7 +66,7 @@ commandRefreshTime = -10000
 extractMatchGroups = r'([$][{][^ }]+[}])'
 def getResponse(messageText):
     global commandRefreshTime, botCommands, botCommandHeaders
-    if not botCommands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshInterval'):
+    if not botCommands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshIntervalMin')*60:
         print('Pulling commands from sheet again...')
         commandRefreshTime = time.time()
 
@@ -128,8 +120,8 @@ class TwitchClient(twitchio.Client):
         self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
     
     async def event_message(self, message):
-        if await checkForCommandAsync(message.content):
-            messageToSend = await getResponseAsync(message.content)
+        if checkForCommand(message.content):
+            messageToSend = getResponse(message.content)
             if messageToSend:
                 print('Sending message to Twitch...')
                 await self.RESPONSE_CHANNEL.send(messageToSend)
@@ -156,9 +148,12 @@ class TwitchClient(twitchio.Client):
             discordSendMsg(':purple_square: **'+message.author.name+"**", messageId, messageDict['messageText'])
 
 twitchClient = None
+twitchClientEventLoop = None
 def twitchServerThreadTarget():
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    global twitchClientEventLoop
+    if not twitchClientEventLoop:
+        twitchClientEventLoop = asyncio.new_event_loop()
+    asyncio.set_event_loop(twitchClientEventLoop)
 
     global twitchClient
     twitchClient = TwitchClient(token=CONFIG['TWITCH_BOT']['accessToken'],
@@ -373,23 +368,26 @@ messageQueue = {}
 
 @discordClient.event
 async def on_message(message):
-    if await checkForCommandAsync(message.clean_content):
-        messageToSend = await getResponseAsync(message.clean_content)
-        if messageToSend:
-                print('Sending message to Discord...')
-                await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
-        return
-    
     if message.type == discord.MessageType.reply:
+        messageToSend = None
+        if checkForCommand(message.clean_content):
+            messageToSend = getResponse(message.clean_content)
+        else:
+            messageToSend = f'[discord] {message.author.name}: {message.clean_content}'
+        
         targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
-            messageToFwd = f'[discord] {message.author.name}: {message.clean_content}'
             print('Forward message to Twitch: {messageToFwd}')
-            await twitchClient.RESPONSE_CHANNEL.send(messageToFwd)
+            await twitchClient.RESPONSE_CHANNEL.send(messageToSend)
         elif ':red_square:' in targetMessage.clean_content:
-            messageToFwd = f'[discord] {message.author.name}: {message.clean_content}'
             print('Forward message to YouTube: {messageToFwd}')
-            youtubeSendMessage(messageToFwd)
+            youtubeSendMessage(messageToSend)
+        return
+    elif checkForCommand(message.clean_content):
+        messageToSend = getResponse(message.clean_content)
+        print('Sending message to Discord...')
+        await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
+        return
 
     global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
@@ -397,7 +395,7 @@ async def on_message(message):
         
         # Await embed changes...
         messageQueue[message.id] = message
-        await asyncio.sleep(.33)
+        await asyncio.sleep(.5)
         message = messageQueue[message.id]
         del messageQueue[message.id]
 
