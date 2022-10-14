@@ -40,6 +40,7 @@ logger.setLevel(logging.ERROR)
 
 messageLog = {}
 messageLogOrdered = []
+activeUsers = {}
 
 pinnedIds = defaultdict(lambda: False)
 hiddenIds = defaultdict(lambda: False)
@@ -55,6 +56,15 @@ discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
 # CHATBOT
+atMentionRegex = r'@([^ ]+)'
+def checkAtMention(messageText):
+    print(f'ACTIVE: {activeUsers}')
+    mentionedUsers = [{'userName': m.lower(), 'service': activeUsers[m]} for m in re.findall(atMentionRegex, messageText) if m in activeUsers.keys()]
+    print(f'MENTION: {mentionedUsers}')
+    if mentionedUsers:
+        return mentionedUsers
+    return None
+
 def checkForCommand(messageText):
     if messageText.startswith('!'):
         return True
@@ -80,8 +90,6 @@ def getResponse(messageText):
                 commandsList.append({ x.lower(): y for (x,y) in zip(botCommandHeaders, row)})
 
         botCommands = {c['command']: c for c in commandsList}
-
-    print(botCommands)
 
     command = messageText.split(' ')[0]
     if command in botCommands:
@@ -140,6 +148,7 @@ class TwitchClient(twitchio.Client):
                 [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
         
         (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
+        activeUsers[messageDict['username'].lower()] = 'Twitch'
 
         if bannedUserIds[messageDict['userId']]:
             print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
@@ -250,6 +259,8 @@ def youtubeCallback(message):
     global websocketServer
     messageHTML = youtubeEmoteSubs(message['htmlText'])
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
+
+    activeUsers[messageDict['username'].lower()] = 'YouTube'
 
     if bannedUserIds[messageDict['userId']]:
         print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
@@ -383,6 +394,14 @@ async def on_message(message):
             print('Forward message to YouTube: {messageToFwd}')
             youtubeSendMessage(messageToSend)
         return
+    elif checkAtMention(message.clean_content):
+        print(f'{checkAtMention(message.clean_content)[0]["userName"]} @mentioned a user in discord...')
+        if checkAtMention(message.clean_content)[0]['service'] == 'YouTube':
+            print('Forward message to YouTube: {messageToFwd}')
+            youtubeSendMessage(message.clean_content)
+        elif checkAtMention(message.clean_content)[0]['service'] == 'Twitch':
+            print('Forward message to Twitch: {messageToFwd}')
+            await twitchClient.RESPONSE_CHANNEL.send(message.clean_content)
     elif checkForCommand(message.clean_content):
         messageToSend = getResponse(message.clean_content)
         print('Sending message to Discord...')
