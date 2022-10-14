@@ -81,15 +81,15 @@ def getResponse(messageText):
         commandRefreshTime = time.time()
 
         commandsWorksheet = sheet.worksheet_by_title(CONFIG['SHEET']['commandsSheetName'])
-        botCommandHeaders = commandsWorksheet.get_values(start='A2', end='F2', returnas='matrix')[0]
-        commandsData = commandsWorksheet.get_values(start='A3', end='F1000', include_tailing_empty=False, returnas='matrix')
+        botCommandHeaders = commandsWorksheet.get_values(start='A2', end='J2', returnas='matrix')[0]
+        commandsData = commandsWorksheet.get_values(start='A3', end='J100', include_tailing_empty=False, returnas='matrix')
 
         commandsList = []
         for row in commandsData:
             if row[0] != '' and row[0] != 'VideoID':
                 commandsList.append({ x.lower(): y for (x,y) in zip(botCommandHeaders, row)})
 
-        botCommands = {c['command']: c for c in commandsList}
+        botCommands = {c['command']: c for c in commandsList if c['enabled'] == 'TRUE'}
 
     command = messageText.split(' ')[0]
     if command in botCommands:
