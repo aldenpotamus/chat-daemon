@@ -56,7 +56,7 @@ discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
 # CHATBOT
-atMentionRegex = r'@([^ ]+)'
+atMentionRegex = r'@([A-Za-z0-9_]+)'
 def checkAtMention(messageText):
     print(f'ACTIVE: {activeUsers}')
     mentionedUsers = [{'userName': m.lower(), 'service': activeUsers[m]} for m in re.findall(atMentionRegex, messageText) if m in activeUsers.keys()]
@@ -72,26 +72,50 @@ def checkForCommand(messageText):
 
 botCommands = None
 botCommandHeaders = None
+commandTemplate = Template('${command}-${service}')
 commandRefreshTime = -10000
-extractMatchGroups = r'([$][{][^ }]+[}])'
-def getResponse(messageText):
+def getCommandsFromSheet(overrideRefresh=False):
+    services = CONFIG['GENERAL']['services'].split(',')
+
     global commandRefreshTime, botCommands, botCommandHeaders
-    if not botCommands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshIntervalMin')*60:
+    if overrideRefresh or not botCommands or (time.time() - commandRefreshTime) > CONFIG.getint('GENERAL', 'commandRefreshIntervalMin')*60:
         print('Pulling commands from sheet again...')
         commandRefreshTime = time.time()
 
         commandsWorksheet = sheet.worksheet_by_title(CONFIG['SHEET']['commandsSheetName'])
-        botCommandHeaders = commandsWorksheet.get_values(start='A2', end='J2', returnas='matrix')[0]
-        commandsData = commandsWorksheet.get_values(start='A3', end='J100', include_tailing_empty=False, returnas='matrix')
+        botCommandHeaders = commandsWorksheet.get_values(start='A2', end='K2', returnas='matrix')[0]
+        commandsData = commandsWorksheet.get_values(start='A3', end='K100', include_tailing_empty=False, returnas='matrix')
 
         commandsList = []
         for row in commandsData:
             if row[0] != '' and row[0] != 'VideoID':
                 commandsList.append({ x.lower(): y for (x,y) in zip(botCommandHeaders, row)})
 
-        botCommands = {c['command']: c for c in commandsList if c['enabled'] == 'TRUE'}
+        botCommands = {}
+        for command in [c for c in commandsList if c['enabled'] == 'TRUE']:
+            if command['service'] != 'All':
+                botCommands[commandTemplate.safe_substitute(command)] = command
+            elif command['service'] == 'All':
+                for service in services:
+                    subCommand = {
+                        'command': command['command'],
+                        'service': service
+                    }
+                    botCommands[commandTemplate.safe_substitute(subCommand)] = command
+        
+        print('Data from sheet pulled successfully...')
 
-    command = messageText.split(' ')[0]
+extractMatchGroups = r'([$][{][^ }]+[}])'
+def getResponse(messageText, service, isMod):
+    getCommandsFromSheet(overrideRefresh=('!refresh' == messageText.split(' ')[0] and isMod))
+    
+    print(botCommands)
+
+    command = commandTemplate.safe_substitute({
+        'command': messageText.split(' ')[0],
+        'service': service
+    })
+
     if command in botCommands:
         print(f'Processing command: {command}...')
         
@@ -129,7 +153,7 @@ class TwitchClient(twitchio.Client):
     
     async def event_message(self, message):
         if checkForCommand(message.content):
-            messageToSend = getResponse(message.content)
+            messageToSend = getResponse(message.content, 'Twitch', message.author.is_mod)
             if messageToSend:
                 print('Sending message to Twitch...')
                 await self.RESPONSE_CHANNEL.send(messageToSend)
@@ -250,7 +274,9 @@ def youtubeCallback(message):
         return
 
     if checkForCommand(message['snippet']['textMessageDetails']['messageText']):
-        messageToSend = getResponse(message['snippet']['textMessageDetails']['messageText'])
+        messageToSend = getResponse(message['snippet']['textMessageDetails']['messageText'], 
+                                    'YouTube',
+                                    message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
         if messageToSend:
                 print('Sending message to YouTube...')
                 youtubeSendMessage(messageToSend)
@@ -377,33 +403,44 @@ async def on_ready():
 
 messageQueue = {}
 
+outwardDiscordMsgTemplate = Template('[discord] ${senderName}: ${msgText}')
 @discordClient.event
 async def on_message(message):
+    msgText = message.clean_content
+    isMod = any([role.name for role in message.author.roles if role.name in CONFIG['DISCORD']['modRoles'].split(',')])
+
     if message.type == discord.MessageType.reply:
         messageToSend = None
-        if checkForCommand(message.clean_content):
-            messageToSend = getResponse(message.clean_content)
+        if checkForCommand(msgText):
+            messageToSend = getResponse(msgText, 'Discord', isMod)
         else:
-            messageToSend = f'[discord] {message.author.name}: {message.clean_content}'
+            messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+                'senderName': message.author.name,
+                'msgText': msgText
+            })
         
         targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
-            print('Forward message to Twitch: {messageToFwd}')
+            print(f'Forward message to Twitch: {messageToSend}')
             await twitchClient.RESPONSE_CHANNEL.send(messageToSend)
         elif ':red_square:' in targetMessage.clean_content:
-            print('Forward message to YouTube: {messageToFwd}')
+            print(f'Forward message to YouTube: {messageToSend}')
             youtubeSendMessage(messageToSend)
-        return
-    elif checkAtMention(message.clean_content):
-        print(f'{checkAtMention(message.clean_content)[0]["userName"]} @mentioned a user in discord...')
-        if checkAtMention(message.clean_content)[0]['service'] == 'YouTube':
-            print('Forward message to YouTube: {messageToFwd}')
-            youtubeSendMessage(message.clean_content)
-        elif checkAtMention(message.clean_content)[0]['service'] == 'Twitch':
-            print('Forward message to Twitch: {messageToFwd}')
-            await twitchClient.RESPONSE_CHANNEL.send(message.clean_content)
-    elif checkForCommand(message.clean_content):
-        messageToSend = getResponse(message.clean_content)
+    elif checkAtMention(msgText):
+        messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+            'senderName': message.author.name,
+            'msgText': msgText
+        })
+
+        print(f'{checkAtMention(msgText)[0]["userName"]} @mentioned a user in discord...')
+        if checkAtMention(msgText)[0]['service'] == 'YouTube':
+            print(f'Forward message to YouTube: {messageToSend}')
+            youtubeSendMessage(messageToSend)
+        elif checkAtMention(msgText)[0]['service'] == 'Twitch':
+            print(f'Forward message to Twitch: {messageToSend}')
+            await twitchClient.RESPONSE_CHANNEL.send(messageToSend)
+    elif checkForCommand(msgText):
+        messageToSend = getResponse(msgText, 'Discord', isMod)
         print('Sending message to Discord...')
         await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
         return
@@ -418,7 +455,7 @@ async def on_message(message):
         message = messageQueue[message.id]
         del messageQueue[message.id]
 
-        messageHTML = discordEmoteSubs(message.clean_content)
+        messageHTML = discordEmoteSubs(msgText)
         
         images = [image.url for image in message.attachments + message.stickers]
         embeds = []
