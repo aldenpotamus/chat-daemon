@@ -6,6 +6,7 @@ var SERVICES = {
     'twitch': './img/twitch_badge_1024.png'
 }
 
+var maxMessages = 6;
 function init() {
     if(window.location.search == '?admin'){
         console.log('Running as admin...');
@@ -185,8 +186,14 @@ function handleMessage(messageJSON) {
                                  message.images ? message.images[0] : null,
                                  message.reactions);               
             });
+            break;
     }
-  }
+
+    if(document.getElementById('messages').children.length > maxMessages) {
+        console.log('Max Messages Reached... remove children!');
+        ws.send(buildMsg('HIDE', document.getElementById('messages').children[0].id, null, null, null));
+    }
+}
 
 function testMessages() {
     shortMsg = "This is a test message...";
