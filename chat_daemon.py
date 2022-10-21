@@ -407,7 +407,10 @@ outwardDiscordMsgTemplate = Template('[discord] ${senderName}: ${msgText}')
 @discordClient.event
 async def on_message(message):
     msgText = message.clean_content
-    isMod = any([role.name for role in message.author.roles if role.name in CONFIG['DISCORD']['modRoles'].split(',')])
+    if hasattr(message.author, 'roles'):
+        isMod = any([role.name for role in message.author.roles if role.name in CONFIG['DISCORD']['modRoles'].split(',')])
+    else:
+        isMod = False
 
     if message.type == discord.MessageType.reply:
         messageToSend = None

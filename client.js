@@ -188,11 +188,6 @@ function handleMessage(messageJSON) {
             });
             break;
     }
-
-    if(document.getElementById('messages').children.length > maxMessages) {
-        console.log('Max Messages Reached... remove children!');
-        ws.send(buildMsg('HIDE', document.getElementById('messages').children[0].id, null, null, null));
-    }
 }
 
 function testMessages() {
