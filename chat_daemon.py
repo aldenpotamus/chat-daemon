@@ -377,27 +377,38 @@ async def on_ready():
             id=youtubeVideoId)
 
         videoDataResponse = videoDataRequest.execute()
+        livestreamName = videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']'
+        
+        #Check for existing thread...
+        lastThread = discordChannel.threads[-1]
 
-        with requests.get(videoDataResponse['items'][0]['snippet']['thumbnails']['standard']['url']) as r:
-            img = Image.open(BytesIO(r.content), mode='r', formats=['JPEG'])
-            tmpImg = img.crop((0,60,640,420))
-            croppedBytes = BytesIO()
-            tmpImg.save(croppedBytes, format='PNG')
-            croppedBytes.seek(0)
-
-            picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
-            links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
-            message = await discordChannel.send(content=links, file=picture)
-
-        if currentDiscordThreadId is None:
-            print('Creating new discord thread...')
-            discordThread = await discordChannel.create_thread(name=videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']',
-                                                            message=message,
-                                                            auto_archive_duration=1440)
-            currentDiscordThread = discordThread.id
+        print(lastThread)
+        if lastThread and lastThread.name == livestreamName:
+            #Connect to existing thread
+            print('Connecting to existing thread...')
+            currentDiscordThread = lastThread.id
+            discordThread = discordClient.get_channel(lastThread.id)
         else:
-            print('Connection reset, reusing existing discordThread [%s].' % currentDiscordThreadId)
-            discordThread = discordClient.get_channel(currentDiscordThreadId)
+            with requests.get(videoDataResponse['items'][0]['snippet']['thumbnails']['standard']['url']) as r:
+                img = Image.open(BytesIO(r.content), mode='r', formats=['JPEG'])
+                tmpImg = img.crop((0,60,640,420))
+                croppedBytes = BytesIO()
+                tmpImg.save(croppedBytes, format='PNG')
+                croppedBytes.seek(0)
+
+                picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
+                links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
+                message = await discordChannel.send(content=links, file=picture)
+
+            if currentDiscordThreadId is None:
+                print('Creating new discord thread...')
+                discordThread = await discordChannel.create_thread(name=livestreamName,
+                                                                    message=message,
+                                                                    auto_archive_duration=1440)
+                currentDiscordThread = discordThread.id
+            else:
+                print('Connection reset, reusing existing discordThread [%s].' % currentDiscordThreadId)
+                discordThread = discordClient.get_channel(currentDiscordThreadId)
 
         print('1 Thread: '+str(discordThread))
 
