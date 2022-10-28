@@ -237,6 +237,14 @@ def twitchEmoteSubs(messageText, substitutionText):
                 'scale': '3.0'}).join([msg[:edit[1]['start']],msg[(edit[1]['end']+1):]])
     return msg
 
+TWITCH_MAX_MSG_LENGTH = 400
+async def twitchSendMessage(messageText):
+    if len(messageText) > TWITCH_MAX_MSG_LENGTH:
+        print(f'[TWITCH] Message too long, not sending: "{messageText}"')
+        return
+    
+    await twitchClient.RESPONSE_CHANNEL.send(messageText)
+
 # YOUTUBE
 youtubeAPI = None
 
@@ -294,7 +302,12 @@ def youtubeCallback(message):
         websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
         discordSendMsg(':red_square: **'+message['authorDetails']['displayName']+'**', messageId, messageDict['messageText'])
 
+YT_MAX_MSG_LENGTH = 200
 def youtubeSendMessage(messageText):
+    if len(messageText) > YT_MAX_MSG_LENGTH:
+        print(f'[YOUTUBE] Message too long, not sending: "{messageText}"')
+        return
+
     request = chatbotService.liveChatMessages().insert(
         part="snippet",
         body={
@@ -436,7 +449,7 @@ async def on_message(message):
         targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
             print(f'Forward message to Twitch: {messageToSend}')
-            await twitchClient.RESPONSE_CHANNEL.send(messageToSend)
+            await twitchSendMessage(messageToSend)
         elif ':red_square:' in targetMessage.clean_content:
             print(f'Forward message to YouTube: {messageToSend}')
             youtubeSendMessage(messageToSend)
@@ -452,7 +465,7 @@ async def on_message(message):
             youtubeSendMessage(messageToSend)
         elif checkAtMention(msgText)[0]['service'] == 'Twitch':
             print(f'Forward message to Twitch: {messageToSend}')
-            await twitchClient.RESPONSE_CHANNEL.send(messageToSend)
+            await twitchSendMessage(messageToSend)
     elif checkForCommand(msgText):
         messageToSend = getResponse(msgText, 'Discord', isMod)
         print('Sending message to Discord...')
