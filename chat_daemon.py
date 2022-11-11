@@ -453,7 +453,7 @@ async def on_message(message):
         elif ':red_square:' in targetMessage.clean_content:
             print(f'Forward message to YouTube: {messageToSend}')
             youtubeSendMessage(messageToSend)
-    elif checkAtMention(msgText):
+    elif not message.author.bot and checkAtMention(msgText):
         messageToSend = outwardDiscordMsgTemplate.safe_substitute({
             'senderName': message.author.name,
             'msgText': msgText
