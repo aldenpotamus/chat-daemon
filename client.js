@@ -233,7 +233,6 @@ function dismissMessage(messageDiv) {
 }
 
 function constructMessage(msgId, messageText, messageHTML, username, service, profilePicURL, imageURL, reactions) {
-    var messageHTMLClean = messageHTML.replace('<','&lt;').replace('>','&gt;');
     var template = document.getElementById('messageTemplate');
     var instance = template.content.cloneNode(true)
 
@@ -268,7 +267,7 @@ function constructMessage(msgId, messageText, messageHTML, username, service, pr
     instance.querySelector('#user-name').innerHTML = username;
     instance.querySelector('#reactions').innerHTML = Array.from(reactions).join('');
     
-    instance.querySelector('.content').innerHTML = messageHTMLClean;
+    instance.querySelector('.content').innerHTML = messageHTML;
 
     document.getElementById('messages').appendChild(instance);
     

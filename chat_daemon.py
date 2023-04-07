@@ -1,5 +1,6 @@
 import asyncio
 import configparser
+import html
 import http.server
 import json
 import logging
@@ -152,8 +153,10 @@ class TwitchClient(twitchio.Client):
         self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
     
     async def event_message(self, message):
-        if checkForCommand(message.content):
-            messageToSend = getResponse(message.content, 'Twitch', message.author.is_mod)
+        contentEscaped = html.escape(message.content)
+        
+        if checkForCommand(contentEscaped):
+            messageToSend = getResponse(contentEscaped, 'Twitch', message.author.is_mod)
             if messageToSend:
                 print('Sending message to Twitch...')
                 await self.RESPONSE_CHANNEL.send(messageToSend)
@@ -168,7 +171,7 @@ class TwitchClient(twitchio.Client):
             for user in await self.fetch_users(names=[message.author.name]):
                 print('Got offline profile picture for '+message.author.name)
                 twitchProfileCache[message.author.name] = user
-        messageWithEmote = twitchEmoteSubs(message.content,
+        messageWithEmote = twitchEmoteSubs(contentEscaped,
                 [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
         
         (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
@@ -277,6 +280,8 @@ def youtubeStart():
     youtubeAPI.start()
 
 def youtubeCallback(message):
+    contentEscaped = message['htmlText']
+
     if message['authorDetails']['channelId'] == ytBotChannelId:
         print('Ignoring chatbot message...')
         return
@@ -291,7 +296,7 @@ def youtubeCallback(message):
         return
     
     global websocketServer
-    messageHTML = youtubeEmoteSubs(message['htmlText'])
+    messageHTML = youtubeEmoteSubs(contentEscaped)
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
 
     activeUsers[messageDict['username'].lower()] = 'YouTube'
@@ -349,7 +354,7 @@ def youtubeEmoteSubs(substitutionText):
 
     for item in substitutionText:
         if item['type'] == 'text':
-            msg += item['text']
+            msg += html.escape(item['text'])
         elif item['type'] == 'img':
             msg += youtubeEmoteTemplate.safe_substitute(item)
 
@@ -430,7 +435,8 @@ messageQueue = {}
 outwardDiscordMsgTemplate = Template('[discord] ${senderName}: ${msgText}')
 @discordClient.event
 async def on_message(message):
-    msgText = message.clean_content
+    msgText = html.escape(message.clean_content)
+
     if hasattr(message.author, 'roles'):
         isMod = any([role.name for role in message.author.roles if role.name in CONFIG['DISCORD']['modRoles'].split(',')])
     else:
