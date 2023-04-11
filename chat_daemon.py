@@ -152,11 +152,11 @@ class TwitchClient(twitchio.Client):
         print('Twitch Ready!')
         self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
     
-    async def event_message(self, message):
-        contentEscaped = html.escape(message.content)
+    async def event_message(self, message):       
+        messageText = message.content
         
-        if checkForCommand(contentEscaped):
-            messageToSend = getResponse(contentEscaped, 'Twitch', message.author.is_mod)
+        if checkForCommand(messageText):
+            messageToSend = getResponse(messageText, 'Twitch', message.author.is_mod)
             if messageToSend:
                 print('Sending message to Twitch...')
                 await self.RESPONSE_CHANNEL.send(messageToSend)
@@ -171,7 +171,8 @@ class TwitchClient(twitchio.Client):
             for user in await self.fetch_users(names=[message.author.name]):
                 print('Got offline profile picture for '+message.author.name)
                 twitchProfileCache[message.author.name] = user
-        messageWithEmote = twitchEmoteSubs(contentEscaped,
+        print(f'EMOTE RAW THING: {message.raw_data}')
+        messageWithEmote = twitchEmoteSubs(messageText,
                 [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
         
         (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
@@ -219,8 +220,8 @@ def twitchMsgToJSON(message, user, msgHTML):
     return (id, messageDict)
 
 def twitchEmoteSubs(messageText, substitutionText):
-    msg = messageText
     edits = []
+    messageParts = []
 
     if len(substitutionText[7:]) > 1:
         for emote in substitutionText[7:].split('/'):
@@ -232,13 +233,31 @@ def twitchEmoteSubs(messageText, substitutionText):
                 edits.append((end, {'id': id, 'start': start, 'end': end}))
         edits.sort(key=lambda x: x[0], reverse=True)
 
+        print(edits)
+
+        messageToProcess = messageText
         for edit in edits:
-            msg = twitchEmoteTemplate.safe_substitute({
+            msgAfter = html.escape(messageToProcess[(edit[1]['end']+1):])
+            messageToProcess = messageToProcess[:edit[1]['start']]
+
+            print(f'[{messageToProcess}] => [{msgAfter}]')
+
+            emoteEmbed = twitchEmoteTemplate.safe_substitute({
                 'id': edit[1]['id'],
                 'format': 'default',
                 'theme_mode': 'dark',
-                'scale': '3.0'}).join([msg[:edit[1]['start']],msg[(edit[1]['end']+1):]])
-    return msg
+                'scale': '3.0'})
+            
+            messageParts.append(msgAfter)
+            messageParts.append(emoteEmbed)
+        
+        messageParts.append(html.escape(messageToProcess))
+        messageParts.reverse()
+
+        return ''.join(messageParts)
+    else:
+        return html.escape(messageText)
+    
 
 TWITCH_MAX_MSG_LENGTH = 400
 async def twitchSendMessage(messageText):
