@@ -305,8 +305,8 @@ def youtubeCallback(message):
         print('Ignoring chatbot message...')
         return
 
-    if checkForCommand(message['snippet']['textMessageDetails']['messageText']):
-        messageToSend = getResponse(message['snippet']['textMessageDetails']['messageText'], 
+    if checkForCommand(message['snippet']['displayMessage']):
+        messageToSend = getResponse(message['snippet']['displayMessage'], 
                                     'YouTube',
                                     message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
         if messageToSend:
@@ -355,7 +355,7 @@ def youtubeMsgToJSON(msg, msgHTML):
       'username': msg['authorDetails']['displayName'],
       'userId': msg['authorDetails']['channelId'],
       'time': msg['snippet']['publishedAt'],
-      'messageText': msg['snippet']['textMessageDetails']['messageText'],
+      'messageText': msg['snippet']['displayMessage'],
       'messageHTML': msgHTML,
       'service': 'youtube',
       'serviceURL': 'img/youtube_badge_1024.png',
