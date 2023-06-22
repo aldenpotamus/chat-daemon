@@ -224,6 +224,11 @@ body.non-admin #messages > .message.pinned > .msg-decorations > #user-service::b
     background-color: #FF0000;
 }
 
+.kick > .msg-decorations > #user-name {
+    color: black;
+    background-color: #51fb11;
+}
+
 /* ADMIN BUTTONS */
 body.non-admin > #messages > * > .admin-btns {
     display: none;

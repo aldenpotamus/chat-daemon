@@ -3,7 +3,8 @@ var ws;
 var SERVICES = {
     'discord': './img/discord_badge_1024.png',
     'youtube': './img/youtube_badge_1024.png',
-    'twitch': './img/twitch_badge_1024.png'
+    'twitch': './img/twitch_badge_1024.png',
+    'kick': './img/kick_badge_1024.png',
 }
 
 var maxMessages = 6;

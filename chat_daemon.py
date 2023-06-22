@@ -20,6 +20,7 @@ import discord
 sys.path.append("..")
 from yt_livechat.youtube_livechat import YoutubeLivechat
 from auth_manager.auth_manager import AuthManager
+from kick_livechat.kick_livechat import KickLivechat
 
 import requests
 from PIL import Image
@@ -607,6 +608,50 @@ discordEmotePattern = re.compile(r'<:[^:]*:([0-9]+)>')
 def discordEmoteSubs(messageText):
     return discordEmotePattern.sub(discordEmoteTemplate.safe_substitute({'id': r'\1'}), messageText)
 
+# KICK
+def kickCallback(message):
+    print('NOTIFY: %s' % message['html_text'])
+    print(message)
+
+    if checkForCommand(message['msg_content']):
+        # messageToSend = getResponse(message['msg_content'], 
+        #                             'Kick',
+        #                             message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
+        # if messageToSend:
+        print('Sending messages to Kick currently unsupported...')
+                # youtubeSendMessage(messageToSend)
+        return
+    
+    global websocketServer
+    messageHTML = message['html_text']
+    (messageId, messageDict) = kickMsgToJSON(message, messageHTML)
+
+    activeUsers[messageDict['username'].lower()] = 'Kick'
+
+    if bannedUserIds[messageDict['userId']]:
+        print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+    else:
+        websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+        discordSendMsg(':green_square: **'+messageDict['username']+'**', messageId, messageDict['messageText'])
+
+def kickMsgToJSON(msg, msgHTML):
+    messageDict = {
+      'id': msg['msg_id'],
+      'username': msg['username'],
+      'userId': msg['user_id'],
+      'time': msg['timestamp'],
+      'messageText': msg['msg_content'],
+      'messageHTML': msgHTML,
+      'service': 'kick',
+      'serviceURL': 'img/kick_badge_1024.png',
+      'avatarURL': msg['user_avatar'],
+      'reactions': [],
+      'images': []
+    }
+    messageLog[msg['msg_id']] = messageDict
+    messageLogOrdered.append(messageDict)
+    return (msg['msg_id'], messageDict)    
+
 # WEBSOCKETS
 def clientJoin(client, server):
 	print("New client connected and was given id %d" % client['id'])
@@ -731,6 +776,10 @@ def main():
     twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
                                         daemon=True)
     twitchClientThread.start()
+
+    print("Connecting to Kick...")
+    kickMonitor = KickLivechat('aldenpotamus')
+    kickMonitor.registerNewCallback(kickCallback)
 
     print("WebSocket Server Starting...")
     global websocketServer
