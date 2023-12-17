@@ -152,6 +152,18 @@ class TwitchClient(twitchio.Client):
     async def event_ready(self):
         print('Twitch Ready!')
         self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
+
+        global youtubeVideoId
+        videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
+                                                                 authConfig=CONFIG['AUTH_MANAGER'])
+        videoDataRequest = videoDataService.videos().list(
+            part="snippet,contentDetails,statistics",
+            id=youtubeVideoId)
+
+        videoDataResponse = videoDataRequest.execute()
+        livestreamName = videoDataResponse['items'][0]['snippet']['title']
+        gameName = re.findall(r'[(]([^)]+)[)]', videoDataResponse['items'][0]['snippet']['title'])[0]
+        await self.change_stream_info(livestreamName, gameName)
     
     async def event_message(self, message):       
         messageText = message.content
@@ -184,6 +196,21 @@ class TwitchClient(twitchio.Client):
         else:
             websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
             discordSendMsg(':purple_square: **'+message.author.name+"**", messageId, messageDict['messageText'])
+
+    async def change_stream_info(self, title, game):
+        print("Updating stream info...")
+        
+        games = await self.fetch_games(names=[game])
+        if not games:
+            print('\tGame not found, defaulting to just chatting...')
+            games = await self.fetch_games(names=["Just Chatting"])
+
+        user = self.create_user(self.user_id,
+                                CONFIG['AUTHENTICATION']['twitchChannelName'])
+        await user.modify_stream(CONFIG['TWITCH_BOT']['accessToken'],
+                                 game_id=games[0].id,
+                                 title=title)
+        print("Stream info updated.")
 
 twitchClient = None
 twitchClientEventLoop = None
@@ -296,6 +323,17 @@ def youtubeStart():
     youtubeAPI = YoutubeLivechat(youtubeVideoId,
                                  ytBcastService=bcastService,
                                  callbacks=[youtubeCallback])
+
+    request = bcastService.liveBroadcasts().update(
+        part='status',
+        body={
+          'id': youtubeVideoId,
+          'status': {
+            'privacyStatus': 'public'
+          }
+        }
+    )
+    response = request.execute()
 
     youtubeAPI.start()
 
@@ -774,7 +812,7 @@ def main():
 
     print("Connecting to Twitch...")
     twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
-                                        daemon=True)
+                                          daemon=True)
     twitchClientThread.start()
 
     print("Connecting to Kick...")
