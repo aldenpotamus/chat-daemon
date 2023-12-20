@@ -162,7 +162,8 @@ class TwitchClient(twitchio.Client):
 
         videoDataResponse = videoDataRequest.execute()
         livestreamName = videoDataResponse['items'][0]['snippet']['title']
-        gameName = re.findall(r'[(]([^)]+)[)]', videoDataResponse['items'][0]['snippet']['title'])[0]
+        gameName = re.findall(r'[(]([^)]+)[)]', videoDataResponse['items'][0]['snippet']['title'])
+        gameName = gameName[0] if gameName else "Just Chatting"
         await self.change_stream_info(livestreamName, gameName)
     
     async def event_message(self, message):       
