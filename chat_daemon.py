@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import configparser
 import html
 import http.server
@@ -147,8 +148,12 @@ class TwitchClient(twitchio.Client):
     RESPONSE_CHANNEL = None
     
     def __init__(self, token, client_secret, initial_channels):
-        super().__init__(token=token, client_secret=client_secret, initial_channels=initial_channels)
-    
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(self.event_token_expired())
+        
+        super().__init__(token=CONFIG['TWITCH_BOT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+
     async def event_ready(self):
         print('Twitch Ready!')
         self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
@@ -166,6 +171,20 @@ class TwitchClient(twitchio.Client):
         gameName = gameName[0] if gameName else "Just Chatting"
         await self.change_stream_info(livestreamName, gameName)
     
+    async def event_token_expired(self):
+        params = {
+            "client_id": CONFIG['TWITCH_BOT']['clientId'],
+            "client_secret": CONFIG['TWITCH_BOT']['clientSecret'],
+            "grant_type": "refresh_token",
+            "refresh_token": CONFIG['TWITCH_BOT']['refreshToken']
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://id.twitch.tv/oauth2/token", params=params) as response:
+                token = await response.json()
+                CONFIG['TWITCH_BOT']['accessToken'] = token['access_token']
+                return token.get("access_token")
+
     async def event_message(self, message):       
         messageText = message.content
         
@@ -325,16 +344,17 @@ def youtubeStart():
                                  ytBcastService=bcastService,
                                  callbacks=[youtubeCallback])
 
-    request = bcastService.liveBroadcasts().update(
-        part='status',
-        body={
-          'id': youtubeVideoId,
-          'status': {
-            'privacyStatus': 'public'
-          }
-        }
-    )
-    response = request.execute()
+    if not CONFIG.getboolean('DEV', 'testMode'):
+        request = bcastService.liveBroadcasts().update(
+            part='status',
+            body={
+            'id': youtubeVideoId,
+            'status': {
+                'privacyStatus': 'public'
+            }
+            }
+        )
+        response = request.execute()
 
     youtubeAPI.start()
 
