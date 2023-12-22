@@ -143,20 +143,30 @@ def getResponse(messageText, service, isMod):
         return response
     return None
 
-# TWITCH  
-class TwitchClient(twitchio.Client):  
-    RESPONSE_CHANNEL = None
-    
+# TWITCH
+class TwitchUpdateClient(twitchio.Client):
     def __init__(self, token, client_secret, initial_channels):
         _loop = asyncio.new_event_loop()
         asyncio.set_event_loop(_loop)
         _loop.run_until_complete(self.event_token_expired())
         
-        super().__init__(token=CONFIG['TWITCH_BOT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+        super().__init__(token=CONFIG['TWITCH_ACCT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+
+    async def event_token_expired(self):
+        botParams = {
+            "client_id": CONFIG['TWITCH_ACCT']['clientId'],
+            "client_secret": CONFIG['TWITCH_ACCT']['clientSecret'],
+            "grant_type": "refresh_token",
+            "refresh_token": CONFIG['TWITCH_ACCT']['refreshToken']
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://id.twitch.tv/oauth2/token", params=botParams) as response:
+                token = await response.json()
+                CONFIG['TWITCH_ACCT']['accessToken'] = token['access_token']     
 
     async def event_ready(self):
-        print('Twitch Ready!')
-        self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
+        print('Updating Twitch Title and Game!')
 
         global youtubeVideoId
         videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
@@ -170,9 +180,42 @@ class TwitchClient(twitchio.Client):
         gameName = re.findall(r'[(]([^)]+)[)]', videoDataResponse['items'][0]['snippet']['title'])
         gameName = gameName[0] if gameName else "Just Chatting"
         await self.change_stream_info(livestreamName, gameName)
+        
+        print('Twitch: Title and Game Set... closing acct connection.')
+        await self.close()
+        print('Closed.')
+
+    async def change_stream_info(self, title, game):
+        print("Updating stream info...")
+        
+        games = await self.fetch_games(names=[game])
+        if not games:
+            print('\tGame not found, defaulting to just chatting...')
+            games = await self.fetch_games(names=["Just Chatting"])
+
+        user = self.create_user(self.user_id,
+                                CONFIG['TWITCH_ACCT']['twitchChannelName'])
+        await user.modify_stream(CONFIG['TWITCH_ACCT']['accessToken'],
+                                 game_id=games[0].id,
+                                 title=title)
+        print("Stream info updated.")
+
+class TwitchClient(twitchio.Client):  
+    RESPONSE_CHANNEL = None
+    
+    def __init__(self, token, client_secret, initial_channels):
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(self.event_token_expired())
+        
+        super().__init__(token=CONFIG['TWITCH_BOT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+
+    async def event_ready(self):
+        print('Twitch Ready!')
+        self.RESPONSE_CHANNEL = self.get_channel(CONFIG['TWITCH_ACCT']['twitchChannelName'])
     
     async def event_token_expired(self):
-        params = {
+        botParams = {
             "client_id": CONFIG['TWITCH_BOT']['clientId'],
             "client_secret": CONFIG['TWITCH_BOT']['clientSecret'],
             "grant_type": "refresh_token",
@@ -180,10 +223,9 @@ class TwitchClient(twitchio.Client):
         }
         
         async with aiohttp.ClientSession() as session:
-            async with session.post("https://id.twitch.tv/oauth2/token", params=params) as response:
+            async with session.post("https://id.twitch.tv/oauth2/token", params=botParams) as response:
                 token = await response.json()
-                CONFIG['TWITCH_BOT']['accessToken'] = token['access_token']
-                return token.get("access_token")
+                CONFIG['TWITCH_BOT']['accessToken'] = token['access_token']           
 
     async def event_message(self, message):       
         messageText = message.content
@@ -217,21 +259,6 @@ class TwitchClient(twitchio.Client):
             websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
             discordSendMsg(':purple_square: **'+message.author.name+"**", messageId, messageDict['messageText'])
 
-    async def change_stream_info(self, title, game):
-        print("Updating stream info...")
-        
-        games = await self.fetch_games(names=[game])
-        if not games:
-            print('\tGame not found, defaulting to just chatting...')
-            games = await self.fetch_games(names=["Just Chatting"])
-
-        user = self.create_user(self.user_id,
-                                CONFIG['AUTHENTICATION']['twitchChannelName'])
-        await user.modify_stream(CONFIG['TWITCH_BOT']['accessToken'],
-                                 game_id=games[0].id,
-                                 title=title)
-        print("Stream info updated.")
-
 twitchClient = None
 twitchClientEventLoop = None
 def twitchServerThreadTarget():
@@ -243,8 +270,22 @@ def twitchServerThreadTarget():
     global twitchClient
     twitchClient = TwitchClient(token=CONFIG['TWITCH_BOT']['accessToken'],
                                 client_secret=CONFIG['TWITCH_BOT']['clientSecret'],
-                                initial_channels=[CONFIG['AUTHENTICATION']['twitchChannelName']])
+                                initial_channels=[CONFIG['TWITCH_ACCT']['twitchChannelName']])
     twitchClient.run()
+
+twitchAcctClient = None
+twitchAcctClientEventLoop = None
+def twitchAcctServerThreadTarget():
+    global twitchAcctClientEventLoop
+    if not twitchAcctClientEventLoop:
+        twitchAcctClientEventLoop = asyncio.new_event_loop()
+    asyncio.set_event_loop(twitchAcctClientEventLoop)
+
+    global twitchAcctClient
+    twitchAcctClient = TwitchUpdateClient(token=CONFIG['TWITCH_ACCT']['accessToken'],
+                                          client_secret=CONFIG['TWITCH_ACCT']['clientSecret'],
+                                          initial_channels=[CONFIG['TWITCH_ACCT']['twitchChannelName']])
+    twitchAcctClient.run()
 
 twitchIdParser = re.compile(r';id=([^;]+)')
 def twitchMsgToJSON(message, user, msgHTML):
@@ -835,6 +876,10 @@ def main():
     twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
                                           daemon=True)
     twitchClientThread.start()
+
+    twitchAcctClientThread = threading.Thread(target=twitchAcctServerThreadTarget,
+                                              daemon=True)
+    twitchAcctClientThread.start()
 
     print("Connecting to Kick...")
     kickMonitor = KickLivechat('aldenpotamus')
