@@ -140,7 +140,7 @@ def getResponse(messageText, service, isMod):
                 if token in requestTokens:
                     response = response.replace(token, requestTokens[token])
 
-        return response
+        return response.split("<br>")
     return None
 
 # TWITCH
@@ -231,10 +231,14 @@ class TwitchClient(twitchio.Client):
         messageText = message.content
         
         if checkForCommand(messageText):
-            messageToSend = getResponse(messageText, 'Twitch', message.author.is_mod)
-            if messageToSend:
-                print('Sending message to Twitch...')
-                await self.RESPONSE_CHANNEL.send(messageToSend)
+            messagesToSend = getResponse(messageText, 'Twitch', message.author.is_mod)
+
+            print('Sending messages to Twitch...')
+            for messageToSend in messagesToSend:
+                print(messageToSend)
+                if messageToSend:
+                    print('Sending message to Twitch...')
+                    await self.RESPONSE_CHANNEL.send(messageToSend)
             return
 
         if not message.author:
@@ -407,12 +411,14 @@ def youtubeCallback(message):
         return
 
     if checkForCommand(message['snippet']['displayMessage']):
-        messageToSend = getResponse(message['snippet']['displayMessage'], 
-                                    'YouTube',
-                                    message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
-        if messageToSend:
-                print('Sending message to YouTube...')
-                youtubeSendMessage(messageToSend)
+        messagesToSend = getResponse(message['snippet']['displayMessage'], 
+                                     'YouTube',
+                                     message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
+        
+        for messageToSend in messagesToSend:
+            if messageToSend:
+                    print('Sending message to YouTube...')
+                    youtubeSendMessage(messageToSend)
         return
     
     global websocketServer
@@ -563,39 +569,44 @@ async def on_message(message):
         isMod = False
 
     if message.type == discord.MessageType.reply:
-        messageToSend = None
+        messagesToSend = None
         if checkForCommand(msgText):
-            messageToSend = getResponse(msgText, 'Discord', isMod)
+            messagesToSend = getResponse(msgText, 'Discord', isMod)
         else:
-            messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+            messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
                 'senderName': message.author.name,
                 'msgText': msgText
-            })
+            }) ]
         
         targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
-            print(f'Forward message to Twitch: {messageToSend}')
-            await twitchSendMessage(messageToSend)
+            print(f'Forward message to Twitch: {messagesToSend}')
+            for messageToSend in messagesToSend:
+                await twitchSendMessage(messageToSend)
         elif ':red_square:' in targetMessage.clean_content:
-            print(f'Forward message to YouTube: {messageToSend}')
-            youtubeSendMessage(messageToSend)
+            print(f'Forward message to YouTube: {messagesToSend}')
+            for messageToSend in messagesToSend:
+                youtubeSendMessage(messageToSend)
     elif not message.author.bot and checkAtMention(msgText):
-        messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+        messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
             'senderName': message.author.name,
             'msgText': msgText
-        })
+        }) ]
 
         print(f'{checkAtMention(msgText)[0]["userName"]} @mentioned a user in discord...')
         if checkAtMention(msgText)[0]['service'] == 'YouTube':
-            print(f'Forward message to YouTube: {messageToSend}')
-            youtubeSendMessage(messageToSend)
+            print(f'Forward message to YouTube: {messagesToSend}')
+            for messageToSend in messagesToSend:
+                youtubeSendMessage(messageToSend)
         elif checkAtMention(msgText)[0]['service'] == 'Twitch':
-            print(f'Forward message to Twitch: {messageToSend}')
-            await twitchSendMessage(messageToSend)
+            print(f'Forward message to Twitch: {messagesToSend}')
+            for messageToSend in messagesToSend:
+                await twitchSendMessage(messageToSend)
     elif checkForCommand(msgText):
-        messageToSend = getResponse(msgText, 'Discord', isMod)
+        messagesToSend = getResponse(msgText, 'Discord', isMod)
         print('Sending message to Discord...')
-        await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
+        for messageToSend in messagesToSend:
+            await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
         return
 
     global discordThread, messageQueue
