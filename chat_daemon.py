@@ -55,6 +55,7 @@ twitchProfileCache = {}
 discordToWebIdMap = {}
 
 twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
+bttvEmoteTemplate = Template('<img class="emote" src=\'https://cdn.betterttv.net/emote/${id}/3x.${imageType}\'/>')
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
@@ -253,7 +254,8 @@ class TwitchClient(twitchio.Client):
         print(f'EMOTE RAW THING: {message.raw_data}')
         messageWithEmote = twitchEmoteSubs(messageText,
                 [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
-        
+        messageWithEmote = bttvSafeSub(messageWithEmote)
+
         (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
         activeUsers[messageDict['username'].lower()] = 'Twitch'
 
@@ -360,6 +362,71 @@ async def twitchSendMessage(messageText):
     
     await twitchClient.RESPONSE_CHANNEL.send(messageText)
 
+# BTTV
+bttvEmotes = {}
+
+def splitIgnoreHTML(str, splitChar):
+    inGT = False
+    splits = []
+    prev = 0
+
+    for i, c in enumerate(str):
+        if c == "<":
+            inGT = True
+        elif c == ">":
+            inGT = False
+        elif c == splitChar and not inGT:
+            splits.append(str[prev:i].strip())
+            prev = i
+    splits.append(str[prev:].strip())
+    
+    return splits
+
+def getBTTVEmotes():
+    base_url = "https://api.betterttv.net/3"
+    global_endpoint = "/cached/emotes/global"
+    user_endpoint = "/cached/users/twitch/84170686"
+
+    # Send requests
+    global_response = requests.get(base_url + global_endpoint)
+    user_response = requests.get(base_url + user_endpoint)
+
+    # Check for successful responses
+    if global_response.status_code == 200 and user_response.status_code == 200:
+        emotes = {}
+        
+        # Parse JSON responses
+        global_data = global_response.json()
+        user_data = user_response.json()
+
+        # Print emote names from global emotes
+        for emote in global_data:
+            emotes[emote['code']] = emote
+
+        # Get shared channel emotes
+        for emote in user_data['sharedEmotes']:
+            emotes[emote['code']] = emote
+
+        # Get channel specific emotes
+        for emote in user_data['channelEmotes']:
+            emotes[emote['code']] = emote
+
+        return emotes
+    else:
+        print("Error:", global_response.status_code, global_response.text)
+        print("Error:", user_response.status_code, user_response.text)
+
+def bttvSafeSub(message):
+    global bttvEmotes
+    msgParts = splitIgnoreHTML(message, " ")
+    print(msgParts)
+    
+    for num, word in enumerate(msgParts):
+        if word.strip(':') in bttvEmotes:
+            msgParts[num] = bttvEmoteTemplate.safe_substitute(bttvEmotes[word.strip(':')])
+
+    return " ".join(msgParts)
+
 # YOUTUBE
 youtubeAPI = None
 
@@ -423,6 +490,9 @@ def youtubeCallback(message):
     
     global websocketServer
     messageHTML = youtubeEmoteSubs(contentEscaped)
+    print("PRE: "+messageHTML)
+    messageHTML = bttvSafeSub(messageHTML)
+    print("POST: "+messageHTML)
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
 
     activeUsers[messageDict['username'].lower()] = 'YouTube'
@@ -877,7 +947,10 @@ def httpServerThreadTarget():
         httpd.serve_forever()
 
 def main():
-    global CONFIG
+    global CONFIG, bttvEmotes
+    print("Getting BTTV Emote List...")
+    bttvEmotes = getBTTVEmotes()
+    
     print("HTTP Server Thread Starting...")
     httpServerThread = threading.Thread(target=httpServerThreadTarget,
                                         daemon=True)
