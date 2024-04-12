@@ -645,7 +645,12 @@ async def on_message(message):
     if message.type == discord.MessageType.reply and message.channel.id == discordThread.id:
         messagesToSend = None
         if checkForCommand(msgText):
-            messagesToSend = getResponse(msgText, 'Discord', isMod)
+            if ':purple_square:' in targetMessage.clean_content:
+                messagesToSend = getResponse(msgText, 'Twitch', isMod)
+            elif ':red_square:' in targetMessage.clean_content:
+                messagesToSend = getResponse(msgText, 'YouTube', isMod)
+            else:
+                messagesToSend = getResponse(msgText, 'Discord', isMod)
         else:
             messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
                 'senderName': message.author.name,
@@ -663,7 +668,7 @@ async def on_message(message):
             if messagesToSend:
                 for messageToSend in messagesToSend:
                     youtubeSendMessage(messageToSend)
-    elif not message.author.bot and checkAtMention(msgText):
+    elif not message.author.bot and checkAtMention(msgText) and message.channel.id == discordThread.id:
         messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
             'senderName': message.author.name,
             'msgText': msgText
