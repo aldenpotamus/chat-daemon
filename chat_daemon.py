@@ -644,6 +644,8 @@ async def on_message(message):
 
     if message.type == discord.MessageType.reply and message.channel.id == discordThread.id:
         messagesToSend = None
+        targetMessage = discordClient.get_message(message.reference.message_id)
+
         if checkForCommand(msgText):
             if ':purple_square:' in targetMessage.clean_content:
                 messagesToSend = getResponse(msgText, 'Twitch', isMod)
@@ -657,7 +659,6 @@ async def on_message(message):
                 'msgText': msgText
             }) ]
         
-        targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
             print(f'Forward message to Twitch: {messagesToSend}')
             if messagesToSend:
