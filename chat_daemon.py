@@ -633,6 +633,8 @@ messageQueue = {}
 outwardDiscordMsgTemplate = Template('[discord] ${senderName}: ${msgText}')
 @discordClient.event
 async def on_message(message):
+    global discordThread, messageQueue
+    
     msgText = html.escape(message.clean_content)
 
     if hasattr(message.author, 'roles'):
@@ -640,7 +642,7 @@ async def on_message(message):
     else:
         isMod = False
 
-    if message.type == discord.MessageType.reply:
+    if message.type == discord.MessageType.reply and message.channel.id == discordThread.id:
         messagesToSend = None
         if checkForCommand(msgText):
             messagesToSend = getResponse(msgText, 'Discord', isMod)
@@ -686,7 +688,6 @@ async def on_message(message):
                 await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
         return
 
-    global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))
         
