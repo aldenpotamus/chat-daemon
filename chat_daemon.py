@@ -36,7 +36,7 @@ import re
 
 discordThread = None
 currentDiscordThreadId = None
-youtubeVideoId = None
+youtubeVideoIds = None
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -169,12 +169,12 @@ class TwitchUpdateClient(twitchio.Client):
     async def event_ready(self):
         print('Updating Twitch Title and Game!')
 
-        global youtubeVideoId
+        global youtubeVideoIds
         videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
                                                                  authConfig=CONFIG['AUTH_MANAGER'])
         videoDataRequest = videoDataService.videos().list(
             part="snippet,contentDetails,statistics",
-            id=youtubeVideoId)
+            id=youtubeVideoIds[0])
 
         videoDataResponse = videoDataRequest.execute()
         livestreamName = videoDataResponse['items'][0]['snippet']['title']
@@ -432,7 +432,7 @@ def bttvSafeSub(message):
 youtubeAPI = None
 
 def youtubeStart():
-    global CONFIG, youtubeVideoId, chatbotService, liveChatId, ytBotChannelId
+    global CONFIG, youtubeVideoIds, chatbotService, liveChatId, ytBotChannelId
     bcastService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-RECV'], 
                                                          authConfig=CONFIG['AUTH_MANAGER'])
 
@@ -441,7 +441,7 @@ def youtubeStart():
 
     request = bcastService.liveBroadcasts().list(
         part='snippet',
-        id=youtubeVideoId
+        id=youtubeVideoIds[0]
     )
     response = request.execute()
     liveChatId = response['items'][0]['snippet']['liveChatId']
@@ -453,7 +453,7 @@ def youtubeStart():
     response = request.execute()
     ytBotChannelId = response['items'][0]['id']
 
-    youtubeAPI = YoutubeLivechat(youtubeVideoId,
+    youtubeAPI = YoutubeLivechat(youtubeVideoIds,
                                  ytBcastService=bcastService,
                                  callbacks=[youtubeCallback])
 
@@ -461,7 +461,7 @@ def youtubeStart():
         request = bcastService.liveBroadcasts().update(
             part='status',
             body={
-            'id': youtubeVideoId,
+            'id': youtubeVideoIds[0],
             'status': {
                 'privacyStatus': 'public'
             }
@@ -585,12 +585,12 @@ async def on_ready():
     else:
         discordChannel = discordClient.get_channel(int(CONFIG['CLIENT']['discordChannelId']))
 
-        global youtubeVideoId
+        global youtubeVideoIds
         videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
                                                                  authConfig=CONFIG['AUTH_MANAGER'])
         videoDataRequest = videoDataService.videos().list(
             part="snippet,contentDetails,statistics",
-            id=youtubeVideoId)
+            id=youtubeVideoIds[0])
 
         videoDataResponse = videoDataRequest.execute()
         livestreamName = videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']'
@@ -613,7 +613,7 @@ async def on_ready():
                 croppedBytes.seek(0)
 
                 picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
-                links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
+                links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoIds[0]+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
                 message = await discordChannel.send(content=links, file=picture)
 
             if currentDiscordThreadId is None:
@@ -999,8 +999,9 @@ def main():
     youtubeStart()
 
 if __name__ == '__main__':
-    print('Running for video: '+str(sys.argv[1]))
-    youtubeVideoId = str(sys.argv[1])
+    print(f'Running for videos: {sys.argv[1]}')
+    youtubeVideoIds = str(sys.argv[1]).split(',')
+    print(youtubeVideoIds)
     del sys.argv[1]
 
     print('Parsing config file...')
