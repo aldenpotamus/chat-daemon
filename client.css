@@ -76,7 +76,8 @@ body.non-admin #messages > .message.shiftleft {
 #messages > .message > .content {
     margin-left: 15px;
     margin-bottom: 20px;
-    -webkit-text-stroke: 1px black;
+    -webkit-text-stroke: 5px black;
+    paint-order: stroke fill;
     text-shadow: 1px 0 0 #000, 0 -1px 0 #000, 0 1px 0 #000, -1px 0 0 #000;
     font-family: 'Roboto', sans-serif;
     font-size: 32px;
@@ -222,6 +223,11 @@ body.non-admin #messages > .message.pinned > .msg-decorations > #user-service::b
 
 .youtube > .msg-decorations > #user-name {
     background-color: #FF0000;
+}
+
+.kick > .msg-decorations > #user-name {
+    color: black;
+    background-color: #51fb11;
 }
 
 /* ADMIN BUTTONS */

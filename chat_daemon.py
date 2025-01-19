@@ -1,4 +1,5 @@
 import asyncio
+import aiohttp
 import configparser
 import html
 import http.server
@@ -20,6 +21,7 @@ import discord
 sys.path.append("..")
 from yt_livechat.youtube_livechat import YoutubeLivechat
 from auth_manager.auth_manager import AuthManager
+from kick_livechat.kick_livechat import KickLivechat
 
 import requests
 from PIL import Image
@@ -34,7 +36,7 @@ import re
 
 discordThread = None
 currentDiscordThreadId = None
-youtubeVideoId = None
+youtubeVideoIds = None
 
 logger = logging.getLogger('discord')
 logger.setLevel(logging.ERROR)
@@ -53,6 +55,7 @@ twitchProfileCache = {}
 discordToWebIdMap = {}
 
 twitchEmoteTemplate = Template('<img class="emote" src=\'https://static-cdn.jtvnw.net/emoticons/v2/${id}/${format}/${theme_mode}/${scale}\'/>')
+bttvEmoteTemplate = Template('<img class="emote" src=\'https://cdn.betterttv.net/emote/${id}/3x.${imageType}\'/>')
 discordEmoteTemplate = Template('<img class="emote" src=\'https://cdn.discordapp.com/emojis/${id}.webp?size=44&quality=lossless\'/>')
 youtubeEmoteTemplate = Template('<img class="emote" alt= \'${text}\' src=\'${src}\'/>')
 
@@ -138,29 +141,107 @@ def getResponse(messageText, service, isMod):
                 if token in requestTokens:
                     response = response.replace(token, requestTokens[token])
 
-        return response
+        return response.split("<br>")
     return None
 
-# TWITCH  
+# TWITCH
+class TwitchUpdateClient(twitchio.Client):
+    def __init__(self, token, client_secret, initial_channels):
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(self.event_token_expired())
+        
+        super().__init__(token=CONFIG['TWITCH_ACCT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+
+    async def event_token_expired(self):
+        botParams = {
+            "client_id": CONFIG['TWITCH_ACCT']['clientId'],
+            "client_secret": CONFIG['TWITCH_ACCT']['clientSecret'],
+            "grant_type": "refresh_token",
+            "refresh_token": CONFIG['TWITCH_ACCT']['refreshToken']
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://id.twitch.tv/oauth2/token", params=botParams) as response:
+                token = await response.json()
+                CONFIG['TWITCH_ACCT']['accessToken'] = token['access_token']     
+
+    async def event_ready(self):
+        print('Updating Twitch Title and Game!')
+
+        global youtubeVideoIds
+        videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
+                                                                 authConfig=CONFIG['AUTH_MANAGER'])
+        videoDataRequest = videoDataService.videos().list(
+            part="snippet,contentDetails,statistics",
+            id=youtubeVideoIds[0])
+
+        videoDataResponse = videoDataRequest.execute()
+        livestreamName = videoDataResponse['items'][0]['snippet']['title']
+        gameName = re.findall(r'[(]([^)]+)[)]', videoDataResponse['items'][0]['snippet']['title'])
+        gameName = gameName[0] if gameName else "Just Chatting"
+        await self.change_stream_info(livestreamName, gameName)
+        
+        print('Twitch: Title and Game Set... closing acct connection.')
+        await self.close()
+        print('Closed.')
+
+    async def change_stream_info(self, title, game):
+        print("Updating stream info...")
+        
+        games = await self.fetch_games(names=[game])
+        if not games:
+            print('\tGame not found, defaulting to just chatting...')
+            games = await self.fetch_games(names=["Just Chatting"])
+
+        user = self.create_user(self.user_id,
+                                CONFIG['TWITCH_ACCT']['twitchChannelName'])
+        await user.modify_stream(CONFIG['TWITCH_ACCT']['accessToken'],
+                                 game_id=games[0].id,
+                                 title=title)
+        print("Stream info updated.")
+
 class TwitchClient(twitchio.Client):  
     RESPONSE_CHANNEL = None
     
     def __init__(self, token, client_secret, initial_channels):
-        super().__init__(token=token, client_secret=client_secret, initial_channels=initial_channels)
-    
+        _loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_loop)
+        _loop.run_until_complete(self.event_token_expired())
+        
+        super().__init__(token=CONFIG['TWITCH_BOT']['accessToken'], client_secret=client_secret, initial_channels=initial_channels)
+
     async def event_ready(self):
         print('Twitch Ready!')
-        self.RESPONSE_CHANNEL = self.get_channel(CONFIG['AUTHENTICATION']['twitchChannelName'])
+        self.RESPONSE_CHANNEL = self.get_channel(CONFIG['TWITCH_ACCT']['twitchChannelName'])
     
+    async def event_token_expired(self):
+        botParams = {
+            "client_id": CONFIG['TWITCH_BOT']['clientId'],
+            "client_secret": CONFIG['TWITCH_BOT']['clientSecret'],
+            "grant_type": "refresh_token",
+            "refresh_token": CONFIG['TWITCH_BOT']['refreshToken']
+        }
+        
+        async with aiohttp.ClientSession() as session:
+            async with session.post("https://id.twitch.tv/oauth2/token", params=botParams) as response:
+                token = await response.json()
+                CONFIG['TWITCH_BOT']['accessToken'] = token['access_token']           
+
     async def event_message(self, message):       
         messageText = message.content
         
         if checkForCommand(messageText):
-            messageToSend = getResponse(messageText, 'Twitch', message.author.is_mod)
-            if messageToSend:
-                print('Sending message to Twitch...')
-                await self.RESPONSE_CHANNEL.send(messageToSend)
-            return
+            messagesToSend = getResponse(messageText, 'Twitch', message.author.is_mod)
+
+            print('Sending messages to Twitch...')
+            if messagesToSend:
+                for messageToSend in messagesToSend:
+                    print(messageToSend)
+                    if messageToSend:
+                        print('Sending message to Twitch...')
+                        await self.RESPONSE_CHANNEL.send(messageToSend)
+                return
 
         if not message.author:
             print('Message is from a bot, ignoring...')
@@ -174,7 +255,8 @@ class TwitchClient(twitchio.Client):
         print(f'EMOTE RAW THING: {message.raw_data}')
         messageWithEmote = twitchEmoteSubs(messageText,
                 [e for e in message.raw_data.split(';') if e.startswith('emotes')][0])
-        
+        messageWithEmote = bttvSafeSub(messageWithEmote)
+
         (messageId, messageDict) = twitchMsgToJSON(message, twitchProfileCache[message.author.name], messageWithEmote)
         activeUsers[messageDict['username'].lower()] = 'Twitch'
 
@@ -195,8 +277,22 @@ def twitchServerThreadTarget():
     global twitchClient
     twitchClient = TwitchClient(token=CONFIG['TWITCH_BOT']['accessToken'],
                                 client_secret=CONFIG['TWITCH_BOT']['clientSecret'],
-                                initial_channels=[CONFIG['AUTHENTICATION']['twitchChannelName']])
+                                initial_channels=[CONFIG['TWITCH_ACCT']['twitchChannelName']])
     twitchClient.run()
+
+twitchAcctClient = None
+twitchAcctClientEventLoop = None
+def twitchAcctServerThreadTarget():
+    global twitchAcctClientEventLoop
+    if not twitchAcctClientEventLoop:
+        twitchAcctClientEventLoop = asyncio.new_event_loop()
+    asyncio.set_event_loop(twitchAcctClientEventLoop)
+
+    global twitchAcctClient
+    twitchAcctClient = TwitchUpdateClient(token=CONFIG['TWITCH_ACCT']['accessToken'],
+                                          client_secret=CONFIG['TWITCH_ACCT']['clientSecret'],
+                                          initial_channels=[CONFIG['TWITCH_ACCT']['twitchChannelName']])
+    twitchAcctClient.run()
 
 twitchIdParser = re.compile(r';id=([^;]+)')
 def twitchMsgToJSON(message, user, msgHTML):
@@ -267,11 +363,76 @@ async def twitchSendMessage(messageText):
     
     await twitchClient.RESPONSE_CHANNEL.send(messageText)
 
+# BTTV
+bttvEmotes = {}
+
+def splitIgnoreHTML(str, splitChar):
+    inGT = False
+    splits = []
+    prev = 0
+
+    for i, c in enumerate(str):
+        if c == "<":
+            inGT = True
+        elif c == ">":
+            inGT = False
+        elif c == splitChar and not inGT:
+            splits.append(str[prev:i].strip())
+            prev = i
+    splits.append(str[prev:].strip())
+    
+    return splits
+
+def getBTTVEmotes():
+    base_url = "https://api.betterttv.net/3"
+    global_endpoint = "/cached/emotes/global"
+    user_endpoint = "/cached/users/twitch/84170686"
+
+    # Send requests
+    global_response = requests.get(base_url + global_endpoint)
+    user_response = requests.get(base_url + user_endpoint)
+
+    # Check for successful responses
+    if global_response.status_code == 200 and user_response.status_code == 200:
+        emotes = {}
+        
+        # Parse JSON responses
+        global_data = global_response.json()
+        user_data = user_response.json()
+
+        # Print emote names from global emotes
+        for emote in global_data:
+            emotes[emote['code']] = emote
+
+        # Get shared channel emotes
+        for emote in user_data['sharedEmotes']:
+            emotes[emote['code']] = emote
+
+        # Get channel specific emotes
+        for emote in user_data['channelEmotes']:
+            emotes[emote['code']] = emote
+
+        return emotes
+    else:
+        print("Error:", global_response.status_code, global_response.text)
+        print("Error:", user_response.status_code, user_response.text)
+
+def bttvSafeSub(message):
+    global bttvEmotes
+    msgParts = splitIgnoreHTML(message, " ")
+    print(msgParts)
+    
+    for num, word in enumerate(msgParts):
+        if word.strip(':') in bttvEmotes:
+            msgParts[num] = bttvEmoteTemplate.safe_substitute(bttvEmotes[word.strip(':')])
+
+    return " ".join(msgParts)
+
 # YOUTUBE
 youtubeAPI = None
 
 def youtubeStart():
-    global CONFIG, youtubeVideoId, chatbotService, liveChatId, ytBotChannelId
+    global CONFIG, youtubeVideoIds, chatbotService, liveChatId, ytBotChannelId
     bcastService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-RECV'], 
                                                          authConfig=CONFIG['AUTH_MANAGER'])
 
@@ -280,7 +441,7 @@ def youtubeStart():
 
     request = bcastService.liveBroadcasts().list(
         part='snippet',
-        id=youtubeVideoId
+        id=youtubeVideoIds[0]
     )
     response = request.execute()
     liveChatId = response['items'][0]['snippet']['liveChatId']
@@ -292,9 +453,21 @@ def youtubeStart():
     response = request.execute()
     ytBotChannelId = response['items'][0]['id']
 
-    youtubeAPI = YoutubeLivechat(youtubeVideoId,
+    youtubeAPI = YoutubeLivechat(youtubeVideoIds,
                                  ytBcastService=bcastService,
                                  callbacks=[youtubeCallback])
+
+    if not CONFIG.getboolean('DEV', 'testMode'):
+        request = bcastService.liveBroadcasts().update(
+            part='status',
+            body={
+            'id': youtubeVideoIds[0],
+            'status': {
+                'privacyStatus': 'public'
+            }
+            }
+        )
+        response = request.execute()
 
     youtubeAPI.start()
 
@@ -306,16 +479,22 @@ def youtubeCallback(message):
         return
 
     if checkForCommand(message['snippet']['displayMessage']):
-        messageToSend = getResponse(message['snippet']['displayMessage'], 
-                                    'YouTube',
-                                    message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
-        if messageToSend:
-                print('Sending message to YouTube...')
-                youtubeSendMessage(messageToSend)
-        return
+        messagesToSend = getResponse(message['snippet']['displayMessage'], 
+                                     'YouTube',
+                                     message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
+        
+        if messagesToSend:
+            for messageToSend in messagesToSend:
+                if messageToSend:
+                        print('Sending message to YouTube...')
+                        youtubeSendMessage(messageToSend)
+            return
     
     global websocketServer
     messageHTML = youtubeEmoteSubs(contentEscaped)
+    print("PRE: "+messageHTML)
+    messageHTML = bttvSafeSub(messageHTML)
+    print("POST: "+messageHTML)
     (messageId, messageDict) = youtubeMsgToJSON(message, messageHTML)
 
     activeUsers[messageDict['username'].lower()] = 'YouTube'
@@ -406,12 +585,12 @@ async def on_ready():
     else:
         discordChannel = discordClient.get_channel(int(CONFIG['CLIENT']['discordChannelId']))
 
-        global youtubeVideoId
+        global youtubeVideoIds
         videoDataService = AuthManager.get_authenticated_service(CONFIG['LIVECHATBOT-READONLY'], 
                                                                  authConfig=CONFIG['AUTH_MANAGER'])
         videoDataRequest = videoDataService.videos().list(
             part="snippet,contentDetails,statistics",
-            id=youtubeVideoId)
+            id=youtubeVideoIds[0])
 
         videoDataResponse = videoDataRequest.execute()
         livestreamName = videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']'
@@ -434,7 +613,7 @@ async def on_ready():
                 croppedBytes.seek(0)
 
                 picture = discord.File(croppedBytes, filename='thumbnail.png', description='YouTube Thumbnail Picture')
-                links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoId+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
+                links = 'Going Live Shortly!\n>>> <https://youtu.be/'+youtubeVideoIds[0]+'>\n<http://twitch.tv/'+CONFIG['GENERAL']['twitchChannelName']+'>'
                 message = await discordChannel.send(content=links, file=picture)
 
             if currentDiscordThreadId is None:
@@ -454,6 +633,8 @@ messageQueue = {}
 outwardDiscordMsgTemplate = Template('[discord] ${senderName}: ${msgText}')
 @discordClient.event
 async def on_message(message):
+    global discordThread, messageQueue
+    
     msgText = html.escape(message.clean_content)
 
     if hasattr(message.author, 'roles'):
@@ -461,43 +642,58 @@ async def on_message(message):
     else:
         isMod = False
 
-    if message.type == discord.MessageType.reply:
-        messageToSend = None
+    if message.type == discord.MessageType.reply and message.channel.id == discordThread.id:
+        messagesToSend = None
+        targetMessage = discordClient.get_message(message.reference.message_id)
+
         if checkForCommand(msgText):
-            messageToSend = getResponse(msgText, 'Discord', isMod)
+            if ':purple_square:' in targetMessage.clean_content:
+                messagesToSend = getResponse(msgText, 'Twitch', isMod)
+            elif ':red_square:' in targetMessage.clean_content:
+                messagesToSend = getResponse(msgText, 'YouTube', isMod)
+            else:
+                messagesToSend = getResponse(msgText, 'Discord', isMod)
         else:
-            messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+            messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
                 'senderName': message.author.name,
                 'msgText': msgText
-            })
+            }) ]
         
-        targetMessage = discordClient.get_message(message.reference.message_id)
         if ':purple_square:' in targetMessage.clean_content:
-            print(f'Forward message to Twitch: {messageToSend}')
-            await twitchSendMessage(messageToSend)
+            print(f'Forward message to Twitch: {messagesToSend}')
+            if messagesToSend:
+                for messageToSend in messagesToSend:
+                    await twitchSendMessage(messageToSend)
         elif ':red_square:' in targetMessage.clean_content:
-            print(f'Forward message to YouTube: {messageToSend}')
-            youtubeSendMessage(messageToSend)
-    elif not message.author.bot and checkAtMention(msgText):
-        messageToSend = outwardDiscordMsgTemplate.safe_substitute({
+            print(f'Forward message to YouTube: {messagesToSend}')
+            if messagesToSend:
+                for messageToSend in messagesToSend:
+                    youtubeSendMessage(messageToSend)
+    elif not message.author.bot and checkAtMention(msgText) and message.channel.id == discordThread.id:
+        messagesToSend = [ outwardDiscordMsgTemplate.safe_substitute({
             'senderName': message.author.name,
             'msgText': msgText
-        })
+        }) ]
 
         print(f'{checkAtMention(msgText)[0]["userName"]} @mentioned a user in discord...')
         if checkAtMention(msgText)[0]['service'] == 'YouTube':
-            print(f'Forward message to YouTube: {messageToSend}')
-            youtubeSendMessage(messageToSend)
+            print(f'Forward message to YouTube: {messagesToSend}')
+            if messagesToSend:
+                for messageToSend in messagesToSend:
+                    youtubeSendMessage(messageToSend)
         elif checkAtMention(msgText)[0]['service'] == 'Twitch':
-            print(f'Forward message to Twitch: {messageToSend}')
-            await twitchSendMessage(messageToSend)
+            print(f'Forward message to Twitch: {messagesToSend}')
+            if messagesToSend:
+                for messageToSend in messagesToSend:
+                    await twitchSendMessage(messageToSend)
     elif checkForCommand(msgText):
-        messageToSend = getResponse(msgText, 'Discord', isMod)
+        messagesToSend = getResponse(msgText, 'Discord', isMod)
         print('Sending message to Discord...')
-        await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
+        if messagesToSend:
+            for messageToSend in messagesToSend:
+                await waitAndSendDiscordMessage(messageToSend, uuid.uuid4().hex)
         return
 
-    global discordThread, messageQueue
     if not message.author.bot and message.channel.id == discordThread.id:
         print('[DISCORD] Message: '+str(message))
         
@@ -606,6 +802,50 @@ def discordMsgToJSON(msg, msgHTML, images=None):
 discordEmotePattern = re.compile(r'<:[^:]*:([0-9]+)>')
 def discordEmoteSubs(messageText):
     return discordEmotePattern.sub(discordEmoteTemplate.safe_substitute({'id': r'\1'}), messageText)
+
+# KICK
+def kickCallback(message):
+    print('NOTIFY: %s' % message['html_text'])
+    print(message)
+
+    if checkForCommand(message['msg_content']):
+        # messageToSend = getResponse(message['msg_content'], 
+        #                             'Kick',
+        #                             message['authorDetails']['isChatModerator'] or message['authorDetails']['isChatOwner'])
+        # if messageToSend:
+        print('Sending messages to Kick currently unsupported...')
+                # youtubeSendMessage(messageToSend)
+        return
+    
+    global websocketServer
+    messageHTML = message['html_text']
+    (messageId, messageDict) = kickMsgToJSON(message, messageHTML)
+
+    activeUsers[messageDict['username'].lower()] = 'Kick'
+
+    if bannedUserIds[messageDict['userId']]:
+        print('Banned User: %s [%s] : Ignoring Message' % (messageDict['username'], messageDict['userId']))
+    else:
+        websocketServer.send_message_to_all(buildMsg('NEW', message=messageDict))
+        discordSendMsg(':green_square: **'+messageDict['username']+'**', messageId, messageDict['messageText'])
+
+def kickMsgToJSON(msg, msgHTML):
+    messageDict = {
+      'id': msg['msg_id'],
+      'username': msg['username'],
+      'userId': msg['user_id'],
+      'time': msg['timestamp'],
+      'messageText': msg['msg_content'],
+      'messageHTML': msgHTML,
+      'service': 'kick',
+      'serviceURL': 'img/kick_badge_1024.png',
+      'avatarURL': msg['user_avatar'],
+      'reactions': [],
+      'images': []
+    }
+    messageLog[msg['msg_id']] = messageDict
+    messageLogOrdered.append(messageDict)
+    return (msg['msg_id'], messageDict)    
 
 # WEBSOCKETS
 def clientJoin(client, server):
@@ -721,7 +961,10 @@ def httpServerThreadTarget():
         httpd.serve_forever()
 
 def main():
-    global CONFIG
+    global CONFIG, bttvEmotes
+    print("Getting BTTV Emote List...")
+    bttvEmotes = getBTTVEmotes()
+    
     print("HTTP Server Thread Starting...")
     httpServerThread = threading.Thread(target=httpServerThreadTarget,
                                         daemon=True)
@@ -729,8 +972,16 @@ def main():
 
     print("Connecting to Twitch...")
     twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
-                                        daemon=True)
+                                          daemon=True)
     twitchClientThread.start()
+
+    twitchAcctClientThread = threading.Thread(target=twitchAcctServerThreadTarget,
+                                              daemon=True)
+    twitchAcctClientThread.start()
+
+    print("Connecting to Kick...")
+    kickMonitor = KickLivechat('aldenpotamus')
+    kickMonitor.registerNewCallback(kickCallback)
 
     print("WebSocket Server Starting...")
     global websocketServer
@@ -748,8 +999,9 @@ def main():
     youtubeStart()
 
 if __name__ == '__main__':
-    print('Running for video: '+str(sys.argv[1]))
-    youtubeVideoId = str(sys.argv[1])
+    print(f'Running for videos: {sys.argv[1]}')
+    youtubeVideoIds = str(sys.argv[1]).split(',')
+    print(youtubeVideoIds)
     del sys.argv[1]
 
     print('Parsing config file...')
