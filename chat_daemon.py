@@ -963,24 +963,29 @@ def main():
     global CONFIG, bttvEmotes
     print("Getting BTTV Emote List...")
     bttvEmotes = getBTTVEmotes()
+
+    print("Getting services...")
+    services = CONFIG['GENERAL']['services'].split(',')
     
     print("HTTP Server Thread Starting...")
     httpServerThread = threading.Thread(target=httpServerThreadTarget,
                                         daemon=True)
     httpServerThread.start()
 
-    print("Connecting to Twitch...")
-    twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
-                                          daemon=True)
-    twitchClientThread.start()
+    if 'Twitch' in services:
+        print("Connecting to Twitch...")
+        twitchClientThread = threading.Thread(target=twitchServerThreadTarget,
+                                            daemon=True)
+        twitchClientThread.start()
 
-    twitchAcctClientThread = threading.Thread(target=twitchAcctServerThreadTarget,
-                                              daemon=True)
-    twitchAcctClientThread.start()
+        twitchAcctClientThread = threading.Thread(target=twitchAcctServerThreadTarget,
+                                                daemon=True)
+        twitchAcctClientThread.start()
 
-    print("Connecting to Kick...")
-    kickMonitor = KickLivechat('aldenpotamus')
-    kickMonitor.registerNewCallback(kickCallback)
+    if 'Kick' in services:
+        print("Connecting to Kick...")
+        kickMonitor = KickLivechat('aldenpotamus')
+        kickMonitor.registerNewCallback(kickCallback)
 
     print("WebSocket Server Starting...")
     global websocketServer
@@ -990,12 +995,14 @@ def main():
     websocketServer.set_fn_message_received(clientMessage)
     websocketServer.run_forever(True)
 
-    print('Connecting to Discord')
-    discordClientThread = threading.Thread(target=discordClientThreadTarget, daemon=True)
-    discordClientThread.start()
+    if 'Discord' in services:
+        print('Connecting to Discord')
+        discordClientThread = threading.Thread(target=discordClientThreadTarget, daemon=True)
+        discordClientThread.start()
 
-    print("Connecting to YouTube...")
-    youtubeStart()
+    if "YouTube" in services:
+        print("Connecting to YouTube...")
+        youtubeStart()
 
 if __name__ == '__main__':
     print(f'Running for videos: {sys.argv[1]}')
