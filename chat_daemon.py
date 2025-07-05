@@ -596,9 +596,8 @@ async def on_ready():
         livestreamName = videoDataResponse['items'][0]['snippet']['title'] + ' ['+videoDataResponse['items'][0]['snippet']['publishedAt'][0:10]+']'
         
         #Check for existing thread...
-        lastThread = discordChannel.threads[-1]
+        lastThread = discordChannel.threads[-1] if len(discordChannel.threads) > 0 else None
 
-        print(lastThread)
         if lastThread and lastThread.name == livestreamName:
             #Connect to existing thread
             print('Connecting to existing thread...')

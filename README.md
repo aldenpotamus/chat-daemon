@@ -1,6 +1,17 @@
 # chat-daemon
 Display multiple livestream chat-feeds (and more) in OBS entirely locally hosted.
 
+## Requirements
+pip install aiohttp
+pip install pygsheets
+pip install -U py-cord
+pip install -U pytz
+pip install websocket_server
+pip install Pillow
+pip install pytchat
+pip install twitchio
+pip install python-youtube
+
 ## Installation
 Download the project via git:
 ```
